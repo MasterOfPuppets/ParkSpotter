@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary palette -->
+    <color name="primary">#3A4A5C</color>
+    <color name="primary_light">#5A6A7C</color>
+    <color name="primary_dark">#2A3A4C</color>
+
+    <!-- Secondary palette -->
+    <color name="secondary">#D4A574</color>
+    <color name="secondary_light">#E4B584</color>
+    <color name="secondary_dark">#C49564</color>
+
+    <!-- Tertiary palette -->
+    <color name="tertiary">#F5F1E8</color>
+    <color name="tertiary_light">#FEFAF5</color>
+
+    <!-- Backgrounds -->
+    <color name="background">#FFFFFF</color>
+    <color name="surface">#F9F7F3</color>
+
+    <!-- Semantic colors -->
+    <color name="error">#B3261E</color>
+    <color name="error_light">#F9DEDC</color>
+    <color name="success">#2D6A4F</color>
+    <color name="success_light">#D1E7DD</color>
+
+    <!-- On colors (for text/icons on colored backgrounds) -->
+    <color name="on_primary">#FFFFFF</color>
+    <color name="on_secondary">#3A4A5C</color>
+    <color name="on_tertiary">#3A4A5C</color>
+    <color name="on_background">#1C1B1F</color>
+    <color name="on_surface">#1C1B1F</color>
+    <color name="on_error">#FFFFFF</color>
+
+    <!-- Neutral grays -->
+    <color name="gray_light">#EFEFEF</color>
+    <color name="gray_medium">#9E9E9E</color>
+    <color name="gray_dark">#424242</color>
+</resources>

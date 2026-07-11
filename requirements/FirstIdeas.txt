@@ -1,0 +1,18 @@
+Pretendo construir uma app que na seguinte situação:
+
+ Estou em viagem, de carro em modo stealth camping, e quero encontrar locais seguros para estacionar e passar a noite.
+
+ responda à seguinte pergunta:
+ Quais as áreas de estacionamento viável, campings ou espaços abertos, parques de estacionamento ou ruas, e locais possíveis de pernoitar disfarçadamente posso encontrar
+ num raio de x metros do meu local atual ou num local escolhido?
+
+
+ As configurações da app devem permitir que o utilizador defina o raio de pesquisa,
+ o tipo de local desejado (estacionamento, camping, espaço aberto, parque de estacionamento, rua),
+ e se prefere locais mais isolados ou com alguma infraestrutura.
+
+ Deve também ter uma configuração para a viatura e classificála quanto ao tamanho, e aspeto.
+Por exemplo, se é um carro familiar com janelas tapadas por dentro, se é uma carrinha comercial pequena sem janelas, uma autocaravana, uma carrinha grande comercial, etc etc.
+Estas configurações vão afetar os resultados da pesquisa, pois alguns locais podem ser mais adequados para determinados tipos de veículos.
+Por exemplo um carro familiar com as janelas tapadas por dentro, dá mais nas vistas do que uma carrinha comercial toda fechada quando estacionados numa rua residencial.
+

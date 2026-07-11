@@ -1,0 +1,188 @@
+RF-01 — Definir contexto de pesquisa
+O utilizador pode iniciar pesquisa a partir da localizacao atual (GPS) ou de um ponto escolhido no mapa.
+
+RF-02 — Definir raio de recolha
+O utilizador indica um raio (ex.: 2000 m) para a pesquisa.
+
+RF-03 — Recolher locais brutos
+A app obtem todos os locais potencialmente estacionaveis dentro do raio definido, sem aplicar preferencias pessoais nesta fase.
+
+RF-04 — Guardar dataset da pesquisa
+A app mantem localmente o conjunto de resultados brutos da pesquisa ativa para permitir reprocessamento sem nova chamada remota imediata.
+
+RF-05 — Aplicar filtros no cliente
+Com base no dataset bruto, o utilizador pode filtrar por criterios (ex.: tipo de local, contexto urbano/natureza, nivel de infraestrutura).
+
+RF-06 — Calcular score no cliente
+Cada local recebe score de adequacao calculado localmente, usando parametros do utilizador (incluindo perfil da viatura).
+
+RF-07 — Recalcular em tempo real
+Ao alterar filtros/parametros, a app recalcula imediatamente filtragem + score + ordenacao sobre o dataset bruto ja recolhido.
+
+RF-08 — Ordenar resultados
+A app permite ordenar por score (default), distancia, e outros criterios relevantes definidos depois.
+
+RF-09 — Ver detalhe de local
+Ao abrir um resultado, o utilizador ve os fatores que contribuiram para o score (explicabilidade minima).
+
+RF-10 — Configurar perfil da viatura
+O utilizador pode criar/editar perfil da viatura (categoria, dimensoes aproximadas, nivel de discricao) para influenciar o score local.
+
+RF-11 — Persistir preferencias
+Filtros, parametros de scoring e perfil da viatura ficam guardados para sessoes futuras.
+
+RF-12 — Atualizar pesquisa sob pedido
+A app so faz nova recolha bruta quando o utilizador mudar local/raio ou pedir atualizacao explicita.
+
+RF-13 — Navegacao para o local selecionado
+Cada resultado deve permitir iniciar navegacao para o destino escolhido. A app deve tentar abrir diretamente uma app de mapas com rota entre a origem da pesquisa e o local selecionado; se nao for possivel, deve fornecer acao de copia de morada/coordenadas para navegacao manual.
+
+RF-14 — Aviso legal e limitacao de responsabilidade
+A app deve apresentar um aviso legal claro informando que: (1) o utilizador e o unico responsavel por estacionar/pernoitar legalmente; (2) a app nao garante legalidade, seguranca ou atualidade dos locais; (3) o utilizador deve sempre confirmar sinalizacao e regras locais antes de estacionar/pernoitar; (4) a app nao se responsabiliza por multas, danos, furtos, reboque ou outras consequencias associadas ao uso.
+
+RF-15 — Confianca dos dados e validacao de locais
+Cada local deve expor sinais de confianca, incluindo data de ultima verificacao, numero de confirmacoes recentes, reports de problemas e indicador de reputacao do utilizador que confirmou/reportou.
+
+RF-16 — Report e confirmacao comunitaria
+Utilizadores devem poder confirmar que um local continua valido e tambem reportar problemas (ex.: proibicao, ruido, inseguranca, lotacao). Estes eventos devem atualizar os indicadores de confianca do local.
+
+RF-17 — Privacidade por defeito no historico de pernoitas
+O historico de pernoitas deve ser guardado localmente por defeito. Qualquer sincronizacao cloud ou partilha com outros utilizadores exige opt-in explicito.
+
+RF-18 — Modo offline
+A app deve manter acesso offline aos ultimos resultados pesquisados, dados essenciais do mapa e detalhes minimos dos locais, permitindo consulta e navegacao basica sem rede quando tecnicamente possivel.
+
+RF-19 — Colaboracao com moderacao
+Utilizadores devem poder sugerir novos locais e propor edicoes em locais existentes. Alteracoes colaborativas devem passar por workflow de revisao/moderacao antes de ficarem publicas.
+
+RF-20 — Modelo free e paid
+A app deve suportar segmentacao de funcionalidades por plano:
+- Free: pesquisa, filtros base, navegacao e historico basico.
+- Pago: funcionalidades avancadas, incluindo heatmap de seguranca, previsoes de ocupacao, alertas inteligentes, sincronizacao cloud multi-dispositivo e exportacoes.
+
+RF-21 [v0.1] — Estrutura de navegacao principal
+As secoes principais da app devem estar acessiveis por menu hamburger. O detalhe de local nao e item de menu e deve ser aberto a partir de um resultado.
+
+RF-22 [v0.1] — Home centrada em mapa
+A Home deve ser o mapa, com indicador de localizacao atual e acesso ao menu hamburger por icone.
+
+RF-23 [v0.1] — Pesquisa guiada por menu
+Ao aceder a opcao Pesquisa pelo menu, a app deve pedir ao utilizador a origem da pesquisa e o raio antes de iniciar recolha de locais brutos.
+
+RF-24 [v0.1] — Comportamento de resultados por sessao
+No ecrã de Resultados, apos uma pesquisa, deve ser mostrada a lista da pesquisa atual. Se ainda nao existir pesquisa na sessao atual, deve ser mostrada a lista do historico.
+
+RF-25 [v0.1] — Aviso legal em modal com intervalo de reapresentacao
+O aviso legal deve ser apresentado em modal no arranque inicial para aceite e consulta, mas nao deve surgir em todas as aberturas da app. A app deve guardar a data/hora da ultima apresentacao e so voltar a mostrar o aviso apos um intervalo configurado (12h ou 24h).
+
+RF-26 [v0.1] — Menu About com informacao da aplicacao
+A app deve ter uma secao About no menu hamburger com: versao atual da app, link/entrada para consulta do aviso legal e informacao basica da aplicacao.
+
+RF-27 — Verificacao de atualizacoes
+Na secao About, a app deve permitir verificar disponibilidade de novas versoes e encaminhar o utilizador para o processo de upgrade quando aplicavel.
+
+RF-28 [v0.1] — Definicao de sessao de pesquisa
+Cada pesquisa iniciada pelo utilizador cria uma nova sessao de pesquisa. A sessao anterior e considerada encerrada no momento em que uma nova pesquisa e iniciada.
+
+RF-29 [v0.1] — Conteudo e estados do historico de sessao
+O Historico deve guardar por sessao: metadados (data/hora, origem, raio), snapshot de contexto (perfil de viatura e parametros/filtros), resultados apresentados (incluindo score e ordenacao), e acoes do utilizador (detalhe aberto, navegar, copiar). O estado da sessao deve suportar, no minimo: ignorado, visitado e pernoita confirmada.
+
+RF-30 [v0.1] — Mapa de navegacao e operacao documentado
+O produto deve manter um mapa de navegacao e operacao vigente, alinhado com os requisitos atuais, para orientar implementacao e validacao de fluxos.
+
+Mapa de navegacao e operacao (baseline v0.1)
+- Arranque: modal de Aviso Legal (primeiro arranque) -> Home (Mapa).
+- Menu hamburger: Home, Pesquisa, Preferencias, Historico, About.
+- Home (Mapa): localizacao atual + icone hamburger para abrir menu.
+- Pesquisa (menu): escolher origem + raio -> recolha de dataset bruto.
+- Resultados: apos pesquisa mostra pesquisa atual; sem pesquisa na sessao atual mostra Historico.
+- Item de resultado: abrir Detalhe, Navegar, Copiar morada/coordenadas.
+- Detalhe: fatores de score + acao de navegacao.
+- Preferencias: perfil de viatura + parametros de filtros/scoring + raio default.
+- Historico: sessoes com estados ignorado/visitado/pernoita confirmada.
+- About: versao atual, aviso legal, verificacao de atualizacoes.
+
+Regras operacionais (baseline v0.1)
+- 1 pesquisa = 1 sessao; nova pesquisa encerra a sessao anterior.
+- Recolha retorna dados brutos; filtros/ranking/score sao sempre calculados no cliente.
+- Navegacao externa tenta abrir app de mapas com rota; fallback por copia de destino.
+
+RF-31 [v0.1] — Entidades base do produto
+A versao 0.1 deve definir as entidades base (modelo de dados e atributos essenciais), incluindo no minimo: SearchSession, PlaceResult, VehicleProfile, UserPreferences e HistoryEntry.
+
+RF-32 [v0.1] — Baseline de design da interface
+A versao 0.1 deve fechar o design base da interface (estrutura visual dos ecras, componentes principais, hierarquia de informacao e comportamento dos estados vazios/carregamento/erro) para permitir implementacao consistente nas versoes seguintes.
+
+Paleta de cores (baseada no logo ParkSpotter)
+  Primaria     : #3A4A5C (azul-slate escuro) — CTAs, highlights, drawer
+  Secundaria   : #D4A574 (ouro/amber) — accents, ícones destaque, badges
+  Terciaria    : #F5F1E8 (cream) — backgrounds soft, cards
+  Background   : #FFFFFF (branco)
+  Surface      : #F9F7F3 (off-white subtle)
+  Error        : #B3261E (red)
+  Success      : #2D6A4F (green)
+
+Tipografia
+  Material 3 default (system font — Roboto/Segoe UI conforme SO)
+  Headlines    : headlineSmall (bold, 24sp)
+  Body         : bodyMedium (regular, 14sp)
+  Labels       : labelMedium (semibold, 12sp)
+
+Estados visuais
+  Loading      : spinner com cor primária
+  Error        : card/snackbar em cor error com mensagem
+  Empty        : ícone secundária + texto descritivo
+  Success      : feedback visual em cor success (toast ou snackbar)
+  Map markers  : origem (localizacao atual/escolhida) usa icone "Home Pin"; sugestoes usam icone "Not Listed Location"; devem ter cores diferentes.
+  Evolucao     : definir posteriormente codigo de cores por tipologia de localizacao/sugestao no mapa.
+
+
+---
+
+REFERENCIA: Tags OSM disponiveis para filtragem (validado em spike v0.1)
+Fonte: OpenStreetMap via Overpass API. Todos os campos sao strings no formato Map<String, String>.
+
+Tipos de objetos devolvidos e respetivos tags uteis para filtragem:
+
+amenity=parking (parque de estacionamento)
+  access       : public | private | permissive | customers
+  parking      : surface | street_side | underground | multi-storey | layby
+  fee          : yes | no
+  surface      : asphalt | gravel | grass | cobblestone | paving_stones | unpaved
+  lit          : yes | no
+  maxstay      : valor livre, ex: "2 hours", "1 day"
+  capacity     : numero (nem sempre presente)
+  supervised   : yes | no
+  operator     : nome do operador (nem sempre presente)
+
+highway=residential (rua residencial)
+  name         : nome da rua
+  maxspeed     : valor numerico em km/h
+  lit          : yes | no
+  surface      : (ver acima)
+  lanes        : numero
+  oneway       : yes | no
+  sidewalk     : both | left | right | none
+
+highway=living_street (zona de coexistencia / zona 20)
+  name         : nome da rua
+  surface      : (ver acima)
+  lit          : yes | no
+
+highway=service + service=parking_aisle (corredor de acesso a estacionamento)
+  access       : (ver acima)
+  surface      : (ver acima)
+
+leisure=park (parque/jardim)
+  name         : nome
+  access       : public | private
+  surface      : (ver acima)
+
+tourism=camp_site (parque de campismo)
+  name         : nome
+  access       : (ver acima)
+  fee          : yes | no
+  tents        : yes | no
+  caravans     : yes | no
+
+Nota: nem todos os objetos terao todos os tags preenchidos. Tags ausentes devem ser tratados como desconhecido no scoring/filtragem.
