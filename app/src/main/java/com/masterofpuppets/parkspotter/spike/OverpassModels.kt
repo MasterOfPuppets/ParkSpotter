@@ -20,19 +20,17 @@ data class OverpassElement(
 
 enum class ApiPlaceType(val key: String) {
     PARKING("parking"),
-    LIVING_STREET("living_street"),
-    RESIDENTIAL_STREET("residential_street"),
-    PARKING_AISLE("parking_aisle"),
+    STREET("street"),
     PARK("park"),
     CAMP_SITE("camp_site"),
     UNKNOWN("unknown");
 
     companion object {
         fun from(tags: Map<String, String>): ApiPlaceType = when {
-            tags["amenity"] == "parking" -> PARKING
-            tags["highway"] == "living_street" -> LIVING_STREET
-            tags["highway"] == "residential" -> RESIDENTIAL_STREET
-            tags["highway"] == "service" && tags["service"] == "parking_aisle" -> PARKING_AISLE
+            tags["amenity"] == "parking" || 
+            (tags["highway"] == "service" && tags["service"] == "parking_aisle") -> PARKING
+            tags["highway"] == "living_street" || 
+            tags["highway"] == "residential" -> STREET
             tags["leisure"] == "park" -> PARK
             tags["tourism"] == "camp_site" -> CAMP_SITE
             else -> UNKNOWN

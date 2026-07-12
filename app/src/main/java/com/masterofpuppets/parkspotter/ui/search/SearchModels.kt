@@ -7,14 +7,14 @@ import java.util.UUID
 data class SearchUiSettings(
     val resultsPageSize: Int = 10,
     val warnIfResultsAbove: Int = 150,
-    val minRadiusMeters: Int = 300,
-    val maxRadiusMeters: Int = 3000,
+    val minRadiusMeters: Int = 200,
+    val maxRadiusMeters: Int = 800,
 ) {
     fun normalized(): SearchUiSettings = copy(
         resultsPageSize = resultsPageSize.coerceIn(1, 100),
         warnIfResultsAbove = warnIfResultsAbove.coerceAtLeast(1),
-        minRadiusMeters = minRadiusMeters.coerceIn(100, 10000),
-        maxRadiusMeters = maxRadiusMeters.coerceAtLeast(minRadiusMeters.coerceIn(100, 10000)),
+        minRadiusMeters = minRadiusMeters.coerceIn(100, 2000),
+        maxRadiusMeters = maxRadiusMeters.coerceIn(minRadiusMeters, 5000),
     )
 }
 
@@ -52,7 +52,5 @@ enum class SearchViewMode {
 
 val defaultSearchTypes: Set<ApiPlaceType> = setOf(
     ApiPlaceType.PARKING,
-    ApiPlaceType.RESIDENTIAL_STREET,
-    ApiPlaceType.LIVING_STREET,
-    ApiPlaceType.PARKING_AISLE,
+    ApiPlaceType.STREET,
 )

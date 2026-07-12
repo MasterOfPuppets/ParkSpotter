@@ -23,6 +23,8 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,6 +51,7 @@ import com.masterofpuppets.parkspotter.ui.search.SearchResultsMapScreen
 import com.masterofpuppets.parkspotter.ui.search.SearchSessionState
 import com.masterofpuppets.parkspotter.ui.search.SearchUiSettings
 import com.masterofpuppets.parkspotter.ui.settings.SettingsScreen
+import com.masterofpuppets.parkspotter.domain.model.PlaceResult
 import kotlinx.coroutines.launch
 
 private const val LEGAL_PREFS_NAME = "legal_notice_prefs"
@@ -73,8 +76,8 @@ class MainActivity : ComponentActivity() {
         val initialSearchSettings = SearchUiSettings(
             resultsPageSize = appSettingsPrefs.getInt(RESULTS_PAGE_SIZE_KEY, 10),
             warnIfResultsAbove = appSettingsPrefs.getInt(WARN_IF_RESULTS_ABOVE_KEY, 150),
-            minRadiusMeters = appSettingsPrefs.getInt(MIN_RADIUS_METERS_KEY, 300),
-            maxRadiusMeters = appSettingsPrefs.getInt(MAX_RADIUS_METERS_KEY, 3000),
+            minRadiusMeters = appSettingsPrefs.getInt(MIN_RADIUS_METERS_KEY, 200),
+            maxRadiusMeters = appSettingsPrefs.getInt(MAX_RADIUS_METERS_KEY, 800),
         ).normalized()
 
         setContent {
@@ -116,13 +119,16 @@ private fun ParkSpotterApp(
 ) {
     val drawerState = rememberDrawerState(initialValue = androidx.compose.material3.DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
     val backStack = remember { mutableStateListOf(AppScreen.Home) }
     val currentScreen = backStack.last()
     var showLegalDialog by remember(showLegalOnStart) { mutableStateOf(showLegalOnStart) }
     var searchSettings by remember(initialSearchSettings) { mutableStateOf(initialSearchSettings) }
     var searchSession by remember { mutableStateOf<SearchSessionState?>(null) }
     var showSearchMap by remember { mutableStateOf(false) }
+    var selectedResultForMap by remember { mutableStateOf<PlaceResult?>(null) }
     var isSearchConfigExpanded by remember { mutableStateOf(true) }
+    var searchPageIndex by remember { mutableStateOf(0) }
 
     fun navigateTo(screen: AppScreen) {
         if (backStack.last() != screen) backStack.add(screen)
@@ -135,7 +141,10 @@ private fun ParkSpotterApp(
     BackHandler(enabled = true) {
         when {
             drawerState.isOpen -> scope.launch { drawerState.close() }
-            currentScreen == AppScreen.Search && showSearchMap -> showSearchMap = false
+            currentScreen == AppScreen.Search && showSearchMap -> {
+                showSearchMap = false
+                selectedResultForMap = null
+            }
             backStack.size > 1 -> backStack.removeAt(backStack.lastIndex)
             else -> Unit
         }
@@ -165,7 +174,10 @@ private fun ParkSpotterApp(
             }
         },
     ) {
-        Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+        ) { innerPadding ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -176,10 +188,60 @@ private fun ParkSpotterApp(
                 when (currentScreen) {
                     AppScreen.Home -> HomeMapScreen(modifier = Modifier.fillMaxSize())
                     AppScreen.Search -> if (showSearchMap && currentSearchSession != null) {
+                        val pageSize = searchSettings.resultsPageSize
+                        val singleResult = selectedResultForMap
+                        val allResults = currentSearchSession.allResults.filter { !it.isSanitized }
+                        
+                        val (mapResults, currentPageDisplay, totalPagesDisplay) = if (singleResult != null) {
+                            val globalIndex = allResults.indexOf(singleResult)
+                            val displayList = listOf((globalIndex + 1) to singleResult)
+                            Triple(displayList, globalIndex + 1, allResults.size)
+                        } else {
+                            val totalPages = (allResults.size + pageSize - 1) / pageSize
+                            val pagedList = allResults
+                                .mapIndexed { index, result -> (index + 1) to result }
+                                .drop(searchPageIndex * pageSize)
+                                .take(pageSize)
+                            Triple(pagedList, searchPageIndex + 1, totalPages)
+                        }
+
                         SearchResultsMapScreen(
                             modifier = Modifier.fillMaxSize(),
-                            session = currentSearchSession,
-                            onBack = { showSearchMap = false },
+                            originLat = currentSearchSession.originLat,
+                            originLon = currentSearchSession.originLon,
+                            resultsWithIndex = mapResults,
+                            currentPage = currentPageDisplay,
+                            totalPages = totalPagesDisplay,
+                            isSingleResultMode = singleResult != null,
+                            onNextPage = {
+                                if (singleResult != null) {
+                                    val currentIndex = allResults.indexOf(singleResult)
+                                    if (currentIndex < allResults.size - 1) {
+                                        val nextResult = allResults[currentIndex + 1]
+                                        selectedResultForMap = nextResult
+                                        searchPageIndex = (currentIndex + 1) / pageSize
+                                    }
+                                } else {
+                                    val totalPages = (allResults.size + pageSize - 1) / pageSize
+                                    if (searchPageIndex < totalPages - 1) searchPageIndex++
+                                }
+                            },
+                            onPreviousPage = {
+                                if (singleResult != null) {
+                                    val currentIndex = allResults.indexOf(singleResult)
+                                    if (currentIndex > 0) {
+                                        val prevResult = allResults[currentIndex - 1]
+                                        selectedResultForMap = prevResult
+                                        searchPageIndex = (currentIndex - 1) / pageSize
+                                    }
+                                } else {
+                                    if (searchPageIndex > 0) searchPageIndex--
+                                }
+                            },
+                            onBack = { 
+                                showSearchMap = false
+                                selectedResultForMap = null
+                            },
                         )
                     } else {
                         SearchScreen(
@@ -188,11 +250,21 @@ private fun ParkSpotterApp(
                             currentSession = currentSearchSession,
                             isConfigExpanded = isSearchConfigExpanded,
                             onConfigExpandedChanged = { isSearchConfigExpanded = it },
+                            pageIndex = searchPageIndex,
+                            onPageIndexChanged = { searchPageIndex = it },
+                            onResultClick = { result ->
+                                selectedResultForMap = result
+                                showSearchMap = true
+                            },
                             onSessionChanged = { 
                                 searchSession = it 
-                                if (it != null) isSearchConfigExpanded = false
+                                if (it != null) {
+                                    isSearchConfigExpanded = false
+                                    searchPageIndex = 0
+                                }
                             },
                             onOpenMap = { if (currentSearchSession != null) showSearchMap = true },
+                            snackbarHostState = snackbarHostState,
                         )
                     }
                     AppScreen.Preferences -> SettingsScreen(

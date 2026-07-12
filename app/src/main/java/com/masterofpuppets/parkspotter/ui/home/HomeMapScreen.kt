@@ -98,6 +98,9 @@ fun HomeMapScreen(modifier: Modifier = Modifier) {
                             position = point
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                             title = context.getString(R.string.home_current_location_title)
+                            icon = ContextCompat.getDrawable(context, R.drawable.ic_home_pin_marker_filled)?.mutate()?.apply {
+                                setTint(ContextCompat.getColor(context, R.color.primary_dark))
+                            }
                         }
                         mapView.overlays.add(marker)
                     } else {

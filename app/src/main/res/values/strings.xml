@@ -87,6 +87,8 @@
     <string name="search_previous_page">Previous</string>
     <string name="search_next_page">Next</string>
     <string name="search_page_index">Page %1$d</string>
+    <string name="search_page_index_template">Page %1$d / %2$d</string>
+    <string name="search_result_index_template">Result %1$d / %2$d</string>
     <string name="search_result_coords_template">Coordinates: %1$.6f, %2$.6f</string>
     <string name="search_result_distance_template">Distance: %1$d m</string>
     <string name="search_view_list">List</string>
@@ -95,9 +97,7 @@
     <string name="search_too_many_results_hint">Too many results found (%1$d). Refine radius or filters for better precision (threshold: %2$d).</string>
 
     <string name="place_type_parking">Parking</string>
-    <string name="place_type_living_street">Living street</string>
-    <string name="place_type_residential_street">Residential street</string>
-    <string name="place_type_parking_aisle">Parking aisle</string>
+    <string name="place_type_street">Street</string>
     <string name="place_type_park">Park</string>
     <string name="place_type_camp_site">Camp site</string>
     <string name="place_type_unknown">Unknown type</string>

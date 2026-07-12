@@ -58,9 +58,15 @@ object OverpassClient {
 
                 val json = response.body?.string() ?: return@withContext Result.failure(Exception("Empty response"))
                 Log.d(TAG, "Response body (first 500 chars): ${json.take(500)}")
-
+                
+                // New logging for each item in the response
                 val parsed = gson.fromJson(json, OverpassResponse::class.java)
                 Log.d(TAG, "Parsed elements: ${parsed.elements.size}")
+                parsed.elements.forEachIndexed { index, el ->
+                    val name = el.tags["name"] ?: el.tags["ref"] ?: "Unnamed"
+                    Log.d(TAG, "ITEM[$index]: ID=${el.id} | TYPE=${el.type} | NAME=$name | LAT=${el.latitude} | LON=${el.longitude}")
+                }
+
                 Result.success(parsed.elements)
             } catch (e: Exception) {
                 Log.e(TAG, "Exception: ${e.javaClass.simpleName} — ${e.message}", e)

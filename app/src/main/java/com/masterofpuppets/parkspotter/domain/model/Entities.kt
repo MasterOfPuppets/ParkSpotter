@@ -11,7 +11,9 @@ data class PlaceResult(
     val placeType: String,
     val tags: Map<String, String>,
     val distanceMeters: Int,
-    val score: Float? = null
+    val score: Float? = null,
+    val isSanitized: Boolean = false,
+    val sanitizationReason: String? = null
 )
 
 data class SearchSession(

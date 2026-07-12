@@ -133,9 +133,7 @@ private fun SpikeResultCard(element: OverpassElement) {
 
 private fun ApiPlaceType.labelResId(): Int = when (this) {
     ApiPlaceType.PARKING -> R.string.place_type_parking
-    ApiPlaceType.LIVING_STREET -> R.string.place_type_living_street
-    ApiPlaceType.RESIDENTIAL_STREET -> R.string.place_type_residential_street
-    ApiPlaceType.PARKING_AISLE -> R.string.place_type_parking_aisle
+    ApiPlaceType.STREET -> R.string.place_type_street
     ApiPlaceType.PARK -> R.string.place_type_park
     ApiPlaceType.CAMP_SITE -> R.string.place_type_camp_site
     ApiPlaceType.UNKNOWN -> R.string.place_type_unknown
