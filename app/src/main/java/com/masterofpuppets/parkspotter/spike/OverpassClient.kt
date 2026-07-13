@@ -9,6 +9,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
+import okio.IOException
+
 object OverpassClient {
 
     private const val TAG = "OverpassClient"
@@ -53,7 +55,8 @@ object OverpassClient {
                 if (!response.isSuccessful) {
                     val errorBody = response.body?.string() ?: "(empty)"
                     Log.e(TAG, "Error body: $errorBody")
-                    return@withContext Result.failure(Exception("HTTP ${response.code} — $errorBody"))
+                    // Throw an IOException with a structured message containing the code
+                    throw IOException("HTTP_${response.code}")
                 }
 
                 val json = response.body?.string() ?: return@withContext Result.failure(Exception("Empty response"))

@@ -134,6 +134,9 @@ private fun ParkSpotterApp(
     var selectedResultForMap by remember { mutableStateOf<PlaceResult?>(null) }
     var isSearchConfigExpanded by remember { mutableStateOf(true) }
     var searchPageIndex by remember { mutableStateOf(0) }
+    
+    val defaultRadius = 300.coerceIn(searchSettings.normalized().minRadiusMeters, searchSettings.normalized().maxRadiusMeters)
+    val searchFormState = remember { com.masterofpuppets.parkspotter.ui.search.SearchFormState(defaultRadius) }
 
     fun navigateTo(screen: AppScreen) {
         if (backStack.last() != screen) backStack.add(screen)
@@ -252,6 +255,7 @@ private fun ParkSpotterApp(
                         SearchScreen(
                             modifier = Modifier.fillMaxSize(),
                             settings = searchSettings,
+                            formState = searchFormState,
                             currentSession = currentSearchSession,
                             isConfigExpanded = isSearchConfigExpanded,
                             onConfigExpandedChanged = { isSearchConfigExpanded = it },

@@ -41,6 +41,7 @@ private const val SPIKE_RADIUS = 1000
 
 @Composable
 fun OverpassSpikeScreen(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var state by remember { mutableStateOf<SpikeState>(SpikeState.Idle) }
 
@@ -61,7 +62,16 @@ fun OverpassSpikeScreen(modifier: Modifier = Modifier) {
                     val result = OverpassClient.queryParkingAreas(SPIKE_LAT, SPIKE_LON, SPIKE_RADIUS)
                     state = result.fold(
                         onSuccess = { SpikeState.Success(it) },
-                        onFailure = { SpikeState.Error(it.message ?: "") }
+                        onFailure = {
+                            val msg = it.message ?: ""
+                            val displayError = if (msg.startsWith("HTTP_")) {
+                                val code = msg.removePrefix("HTTP_")
+                                context.getString(R.string.search_error_api_failed, code)
+                            } else {
+                                msg.takeIf(String::isNotBlank) ?: context.getString(R.string.error_unknown)
+                            }
+                            SpikeState.Error(displayError)
+                        }
                     )
                 }
             },

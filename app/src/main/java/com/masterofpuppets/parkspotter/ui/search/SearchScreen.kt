@@ -76,6 +76,7 @@ import kotlin.math.sqrt
 fun SearchScreen(
     modifier: Modifier = Modifier,
     settings: SearchUiSettings,
+    formState: SearchFormState,
     currentSession: SearchSessionState?,
     isConfigExpanded: Boolean,
     onConfigExpandedChanged: (Boolean) -> Unit,
@@ -92,15 +93,6 @@ fun SearchScreen(
     val minRadius = normalizedSettings.minRadiusMeters
     val maxRadius = normalizedSettings.maxRadiusMeters
     var state by remember { mutableStateOf<SearchUiState>(SearchUiState.Idle) }
-    var originMode by remember { mutableStateOf(SearchOriginMode.CURRENT_LOCATION) }
-    var manualLat by remember { mutableStateOf("") }
-    var manualLon by remember { mutableStateOf("") }
-    var radiusMeters by remember(minRadius, maxRadius) {
-        mutableStateOf(300.coerceIn(minRadius, maxRadius))
-    }
-    var selectedContext by remember { mutableStateOf(SearchContext.URBAN) }
-    var sortMode by remember { mutableStateOf(SearchSortMode.DISTANCE) }
-    var selectedTypes by remember { mutableStateOf(defaultSearchTypes) }
     var hasLocationPermission by remember { mutableStateOf(hasLocationPermission(context)) }
     var showRadiusPreview by remember { mutableStateOf(false) }
     var lastSubmittedParams by remember { mutableStateOf<SearchRequestParams?>(null) }
@@ -116,6 +108,15 @@ fun SearchScreen(
     LaunchedEffect(warningMessage) {
         if (warningMessage != null) {
             snackbarHostState.showSnackbar(warningMessage)
+        }
+    }
+
+    LaunchedEffect(state) {
+        if (state is SearchUiState.Error) {
+            val errorMessage = (state as SearchUiState.Error).message
+            snackbarHostState.showSnackbar(errorMessage)
+            // Optional: reset state to idle so it doesn't trigger again on recomposition
+            state = SearchUiState.Idle
         }
     }
 
@@ -143,21 +144,21 @@ fun SearchScreen(
 
         if (currentSession == null || isConfigExpanded) {
             SearchOriginSelector(
-                selected = originMode,
-                onSelected = { originMode = it },
+                selected = formState.originMode,
+                onSelected = { formState.originMode = it },
             )
 
-            if (originMode == SearchOriginMode.MANUAL_COORDINATES) {
+            if (formState.originMode == SearchOriginMode.MANUAL_COORDINATES) {
                 OutlinedTextField(
-                    value = manualLat,
-                    onValueChange = { manualLat = it },
+                    value = formState.manualLat,
+                    onValueChange = { formState.manualLat = it },
                     label = { Text(stringResource(R.string.search_latitude_label)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
                 OutlinedTextField(
-                    value = manualLon,
-                    onValueChange = { manualLon = it },
+                    value = formState.manualLon,
+                    onValueChange = { formState.manualLon = it },
                     label = { Text(stringResource(R.string.search_longitude_label)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
@@ -165,59 +166,71 @@ fun SearchScreen(
             }
 
             Text(
-                text = stringResource(R.string.search_radius_value_template, radiusMeters, minRadius, maxRadius),
+                text = stringResource(R.string.search_radius_value_template, formState.radiusMeters, minRadius, maxRadius),
                 style = MaterialTheme.typography.bodyMedium,
             )
             Slider(
-                value = radiusMeters.toFloat(),
+                value = formState.radiusMeters.toFloat(),
                 onValueChange = { value ->
-                    radiusMeters = value.toInt().coerceIn(minRadius, maxRadius)
+                    formState.radiusMeters = value.toInt().coerceIn(minRadius, maxRadius)
                     showRadiusPreview = true
                 },
                 onValueChangeFinished = { showRadiusPreview = false },
                 valueRange = minRadius.toFloat()..maxRadius.toFloat(),
             )
 
-            SearchContextSelector(selected = selectedContext, onSelected = { selectedContext = it })
-            SearchTypeSelector(selectedTypes = selectedTypes, onSelectedTypes = { selectedTypes = it })
-            SearchSortSelector(selected = sortMode, onSelected = { sortMode = it })
+            SearchContextSelector(selected = formState.selectedContext, onSelected = { formState.selectedContext = it })
+            SearchTypeSelector(selectedTypes = formState.selectedTypes, onSelectedTypes = { formState.selectedTypes = it })
+            SearchSortSelector(selected = formState.sortMode, onSelected = { formState.sortMode = it })
 
-            Button(
-                onClick = {
-                    scope.launch {
-                        val radius = radiusMeters
-                        val manualCoordinates = if (originMode == SearchOriginMode.MANUAL_COORDINATES) {
-                            val lat = manualLat.toDoubleOrNull()
-                            val lon = manualLon.toDoubleOrNull()
-                            if (lat == null || lon == null || lat !in -90.0..90.0 || lon !in -180.0..180.0) {
-                                state = SearchUiState.Error(context.getString(R.string.search_error_invalid_coordinates))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                androidx.compose.material3.TextButton(
+                    onClick = { formState.reset(minRadius) },
+                    enabled = state !is SearchUiState.Loading,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.search_reset_button))
+                }
+
+                Button(
+                    onClick = {
+                        scope.launch {
+                            val radius = formState.radiusMeters
+                            val manualCoordinates = if (formState.originMode == SearchOriginMode.MANUAL_COORDINATES) {
+                                val lat = formState.manualLat.toDoubleOrNull()
+                                val lon = formState.manualLon.toDoubleOrNull()
+                                if (lat == null || lon == null || lat !in -90.0..90.0 || lon !in -180.0..180.0) {
+                                    state = SearchUiState.Error(context.getString(R.string.search_error_invalid_coordinates))
+                                    return@launch
+                                }
+                                lat to lon
+                            } else {
+                                null
+                            }
+                            val requestParams = SearchRequestParams(
+                                originMode = formState.originMode,
+                                manualLat = manualCoordinates?.first,
+                                manualLon = manualCoordinates?.second,
+                                radiusMeters = radius,
+                                context = formState.selectedContext,
+                                sortMode = formState.sortMode,
+                                selectedTypes = formState.selectedTypes.map { it.key }.toSet(),
+                            )
+
+                            if (currentSession != null && requestParams == lastSubmittedParams) {
+                                onConfigExpandedChanged(false)
+                                state = SearchUiState.Success
                                 return@launch
                             }
-                            lat to lon
-                        } else {
-                            null
-                        }
-                        val requestParams = SearchRequestParams(
-                            originMode = originMode,
-                            manualLat = manualCoordinates?.first,
-                            manualLon = manualCoordinates?.second,
-                            radiusMeters = radius,
-                            context = selectedContext,
-                            sortMode = sortMode,
-                            selectedTypes = selectedTypes.map { it.key }.toSet(),
-                        )
 
-                        if (currentSession != null && requestParams == lastSubmittedParams) {
-                            onConfigExpandedChanged(false)
-                            state = SearchUiState.Success
-                            return@launch
-                        }
+                            state = SearchUiState.Loading
+                            onPageIndexChanged(0)
+                            onSessionChanged(null)
 
-                        state = SearchUiState.Loading
-                        onPageIndexChanged(0)
-                        onSessionChanged(null)
-
-                        val origin = when (originMode) {
+                            val origin = when (formState.originMode) {
                             SearchOriginMode.CURRENT_LOCATION -> {
                                 if (!hasLocationPermission) {
                                     locationPermissionLauncher.launch(
@@ -249,11 +262,11 @@ fun SearchScreen(
                         state = result.fold(
                             onSuccess = { elements ->
                                 val mapped = elements
-                                    .filter { selectedTypes.contains(it.placeType) }
+                                    .filter { formState.selectedTypes.contains(it.placeType) }
                                     .map { it.toPlaceResult(origin.first, origin.second) }
                                     .let { applySanitization(it) }
                                     .let { list ->
-                                        when (sortMode) {
+                                        when (formState.sortMode) {
                                             SearchSortMode.DISTANCE -> list.sortedBy { it.distanceMeters }
                                             SearchSortMode.SCORE -> list.sortedByDescending { it.score ?: 0f }
                                         }
@@ -270,7 +283,7 @@ fun SearchScreen(
                                     originLat = origin.first,
                                     originLon = origin.second,
                                     radiusMeters = radius,
-                                    context = selectedContext,
+                                    context = formState.selectedContext,
                                     allResults = mapped,
                                     shouldShowTooManyResultsWarning = mapped.size > normalizedSettings.warnIfResultsAbove,
                                 )
@@ -280,18 +293,25 @@ fun SearchScreen(
                                 SearchUiState.Success
                             },
                             onFailure = {
-                                SearchUiState.Error(
-                                    it.message?.takeIf(String::isNotBlank)
-                                        ?: context.getString(R.string.error_unknown),
-                                )
+                                val msg = it.message ?: ""
+                                val displayError = if (msg.startsWith("HTTP_")) {
+                                    val code = msg.removePrefix("HTTP_")
+                                    context.getString(R.string.search_error_api_failed, code)
+                                } else {
+                                    msg.takeIf(String::isNotBlank) ?: context.getString(R.string.error_unknown)
+                                }
+                                
+                                SearchUiState.Error(displayError)
                             },
                         )
                     }
                 },
                 enabled = state !is SearchUiState.Loading,
+                modifier = Modifier.weight(1f)
             ) {
                 Text(stringResource(R.string.search_start_button))
             }
+        } // closes Row
         } else if (currentSession != null) {
             SearchSessionSummaryCard(
                 session = currentSession,
@@ -303,12 +323,7 @@ fun SearchScreen(
             is SearchUiState.Loading -> Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
-
-            is SearchUiState.Error -> Text(
-                text = stringResource(R.string.search_error_template, (state as SearchUiState.Error).message),
-                color = MaterialTheme.colorScheme.error,
-            )
-
+            // Error is now handled by the Snackbar LaunchEffect above
             else -> Unit
         }
 
@@ -359,11 +374,11 @@ fun SearchScreen(
         RadiusPreviewDialog(
             origin = resolvePreviewOrigin(
                 context = context,
-                originMode = originMode,
-                manualLat = manualLat,
-                manualLon = manualLon,
+                originMode = formState.originMode,
+                manualLat = formState.manualLat,
+                manualLon = formState.manualLon,
             ),
-            radiusMeters = radiusMeters,
+            radiusMeters = formState.radiusMeters,
             onDismiss = { showRadiusPreview = false },
         )
     }

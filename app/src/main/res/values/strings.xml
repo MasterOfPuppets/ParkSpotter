@@ -71,10 +71,12 @@
     <string name="search_sort_distance">Distance</string>
     <string name="search_sort_score">Score</string>
     <string name="search_start_button">Start search</string>
+    <string name="search_reset_button">Reset</string>
     <string name="search_radius_value_template">Radius: %1$d m (min %2$d / max %3$d)</string>
     <string name="search_radius_preview_title">Radius preview</string>
     <string name="search_radius_preview_distance">Current radius: %1$d m</string>
     <string name="search_error_template">Error: %1$s</string>
+    <string name="search_error_api_failed">The map servers are currently busy or unavailable. Please wait a few seconds and try again. [Code: %1$s]</string>
     <string name="search_error_invalid_radius">Please enter a valid radius in meters.</string>
     <string name="search_error_location_permission">Location permission is required to use current location as origin.</string>
     <string name="search_error_location_unavailable">Current location is unavailable right now.</string>
