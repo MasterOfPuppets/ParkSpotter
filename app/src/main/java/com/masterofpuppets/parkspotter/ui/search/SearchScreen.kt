@@ -730,6 +730,9 @@ private fun applySanitization(results: List<PlaceResult>): List<PlaceResult> {
     // Rule 3: Deduplicate consecutive/redundant aisles (Situation 1)
     workingList = deduplicateRedundantAisles(workingList)
 
+    // Rule 4: Sanitize streets by isolation and survival (The "C" vs "A,B,D,E" rule)
+    workingList = sanitizeStreetsByIsolationAndSurvival(workingList)
+
     return workingList
 }
 
@@ -749,7 +752,7 @@ private fun sanitizeExactDuplicates(results: List<PlaceResult>): List<PlaceResul
             } else if (current.osmType == "way" && duplicate.osmType == "node") {
                 // In this case we would have already processed the node, but since we are mapping, 
                 // we'll handle this by marking current as active and we'd need to mark the previously processed as sanitized.
-                // To keep it simple in a single pass: mark the current as sanitized if it's the "weaker" one.
+                // To keep it simple in a single pass: mark the current as sanitized if it's the \"weaker\" one.
                 current
             } else {
                 current.copy(isSanitized = true, sanitizationReason = "Exact coordinate duplicate")
@@ -813,6 +816,55 @@ private fun deduplicateRedundantAisles(results: List<PlaceResult>): List<PlaceRe
             } else {
                 current
             }
+        }
+    }
+}
+
+private fun sanitizeStreetsByIsolationAndSurvival(results: List<PlaceResult>): List<PlaceResult> {
+    val streetResults = results.filter { it.placeType == ApiPlaceType.STREET.key && !it.isSanitized }
+    if (streetResults.isEmpty()) return results
+
+    // Group by street name (ignore unnamed for this specific logic)
+    val groupedByStreet = streetResults.filter { !it.name.isNullOrBlank() }.groupBy { it.name }
+    val sanitizedIds = mutableSetOf<Long>()
+    val savedIds = mutableSetOf<Long>()
+
+    groupedByStreet.forEach { (_, pins) ->
+        if (pins.size <= 1) return@forEach // Only one pin, it's naturally isolated
+
+        // Identify which pins are clustered (< 35m from any other pin in the same street)
+        val clusteredPins = pins.filter { current ->
+            pins.any { other ->
+                current.osmId != other.osmId &&
+                        haversineDistanceMeters(current.latitude, current.longitude, other.latitude, other.longitude) < 35
+            }
+        }
+        val isolatedPins = pins.filter { it !in clusteredPins }
+
+        if (isolatedPins.isNotEmpty()) {
+            // Rule: If there are isolated pins, they stay. All clustered pins disappear.
+            clusteredPins.forEach { sanitizedIds.add(it.osmId) }
+        } else {
+            // Survival Routine: No isolated pins exist for this street.
+            // All would disappear, so we save the single richest one.
+            val richestPin = clusteredPins.maxByOrNull { it.tags.size }
+            if (richestPin != null) {
+                clusteredPins.forEach { pin ->
+                    if (pin.osmId != richestPin.osmId) {
+                        sanitizedIds.add(pin.osmId)
+                    } else {
+                        savedIds.add(pin.osmId)
+                    }
+                }
+            }
+        }
+    }
+
+    return results.map { res ->
+        if (sanitizedIds.contains(res.osmId) && !savedIds.contains(res.osmId)) {
+            res.copy(isSanitized = true, sanitizationReason = "Clustered street segment suppressed by isolation rule")
+        } else {
+            res
         }
     }
 }

@@ -50,8 +50,13 @@ import com.masterofpuppets.parkspotter.ui.search.SearchScreen
 import com.masterofpuppets.parkspotter.ui.search.SearchResultsMapScreen
 import com.masterofpuppets.parkspotter.ui.search.SearchSessionState
 import com.masterofpuppets.parkspotter.ui.search.SearchUiSettings
+import com.masterofpuppets.parkspotter.ui.search.SearchOriginMode
+import com.masterofpuppets.parkspotter.ui.search.SearchContext
+import com.masterofpuppets.parkspotter.ui.search.SearchSortMode
+import com.masterofpuppets.parkspotter.ui.search.defaultSearchTypes
 import com.masterofpuppets.parkspotter.ui.settings.SettingsScreen
 import com.masterofpuppets.parkspotter.domain.model.PlaceResult
+import com.masterofpuppets.parkspotter.spike.ApiPlaceType
 import kotlinx.coroutines.launch
 
 private const val LEGAL_PREFS_NAME = "legal_notice_prefs"
