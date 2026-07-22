@@ -33,11 +33,6 @@ data class SearchSessionState(
     val shouldShowTooManyResultsWarning: Boolean,
 )
 
-enum class SearchOriginMode {
-    CURRENT_LOCATION,
-    MANUAL_COORDINATES,
-}
-
 enum class SearchContext {
     URBAN,
     SUBURBAN,
@@ -60,18 +55,13 @@ val defaultSearchTypes: Set<ApiPlaceType> = setOf(
 )
 
 class SearchFormState(initialRadius: Int) {
-    var originMode by mutableStateOf(SearchOriginMode.CURRENT_LOCATION)
-    var manualLat by mutableStateOf("")
-    var manualLon by mutableStateOf("")
+    var locationQuery by mutableStateOf("")
     var radiusMeters by mutableIntStateOf(initialRadius)
     var selectedContext by mutableStateOf(SearchContext.URBAN)
     var sortMode by mutableStateOf(SearchSortMode.DISTANCE)
     var selectedTypes by mutableStateOf(defaultSearchTypes)
 
     fun reset(initialRadius: Int) {
-        originMode = SearchOriginMode.CURRENT_LOCATION
-        manualLat = ""
-        manualLon = ""
         radiusMeters = initialRadius
         selectedContext = SearchContext.URBAN
         sortMode = SearchSortMode.DISTANCE

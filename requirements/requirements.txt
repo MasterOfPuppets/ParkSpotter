@@ -1,37 +1,37 @@
-RF-01 — Definir contexto de pesquisa
+RF-01 [v0.1] — Definir contexto de pesquisa
 O utilizador pode iniciar pesquisa a partir da localizacao atual (GPS) ou de um ponto escolhido no mapa.
 
-RF-02 — Definir raio de recolha
+RF-02 [v0.1] — Definir raio de recolha
 O utilizador indica um raio (ex.: 2000 m) para a pesquisa.
 
-RF-03 — Recolher locais brutos
+RF-03 [v0.1] — Recolher locais brutos
 A app obtem todos os locais potencialmente estacionaveis dentro do raio definido, sem aplicar preferencias pessoais nesta fase.
 
-RF-04 — Guardar dataset da pesquisa
+RF-04 [v0.1] — Guardar dataset da pesquisa
 A app mantem localmente o conjunto de resultados brutos da pesquisa ativa para permitir reprocessamento sem nova chamada remota imediata.
 
-RF-05 — Aplicar filtros no cliente
+RF-05 [v0.1] — Aplicar filtros no cliente
 Com base no dataset bruto, o utilizador pode filtrar por criterios (ex.: tipo de local, contexto urbano/natureza, nivel de infraestrutura).
 
-RF-06 — Calcular score no cliente
+RF-06 [suspended] — Calcular score no cliente
 Cada local recebe score de adequacao calculado localmente, usando parametros do utilizador (incluindo perfil da viatura).
 
-RF-07 — Recalcular em tempo real
+RF-07 [v0.1] — Recalcular em tempo real
 Ao alterar filtros/parametros, a app recalcula imediatamente filtragem + score + ordenacao sobre o dataset bruto ja recolhido.
 
-RF-08 — Ordenar resultados
+RF-08 [v0.1] — Ordenar resultados
 A app permite ordenar por score (default), distancia, e outros criterios relevantes definidos depois.
 
-RF-09 — Ver detalhe de local
+RF-09 [v0.1] — Ver detalhe de local
 Ao abrir um resultado, o utilizador ve os fatores que contribuiram para o score (explicabilidade minima).
 
-RF-10 — Configurar perfil da viatura
+RF-10 [v0.1] — Configurar perfil da viatura
 O utilizador pode criar/editar perfil da viatura (categoria, dimensoes aproximadas, nivel de discricao) para influenciar o score local.
 
-RF-11 — Persistir preferencias
+RF-11 [v0.1] — Persistir preferencias
 Filtros, parametros de scoring e perfil da viatura ficam guardados para sessoes futuras.
 
-RF-12 — Atualizar pesquisa sob pedido
+RF-12 [v0.1] — Atualizar pesquisa sob pedido
 A app so faz nova recolha bruta quando o utilizador mudar local/raio ou pedir atualizacao explicita.
 
 RF-13 — Navegacao para o local selecionado
@@ -69,7 +69,7 @@ A Home deve ser o mapa, com indicador de localizacao atual e acesso ao menu hamb
 RF-23 [v0.1] — Pesquisa guiada por menu
 Ao aceder a opcao Pesquisa pelo menu, a app deve pedir ao utilizador a origem da pesquisa e o raio antes de iniciar recolha de locais brutos.
 
-RF-24 [v0.1] — Comportamento de resultados por sessao
+RF-24 [suspended] — Comportamento de resultados por sessao
 No ecrã de Resultados, apos uma pesquisa, deve ser mostrada a lista da pesquisa atual. Se ainda nao existir pesquisa na sessao atual, deve ser mostrada a lista do historico.
 
 RF-25 [v0.1] — Aviso legal em modal com intervalo de reapresentacao
@@ -84,7 +84,7 @@ Na secao About, a app deve permitir verificar disponibilidade de novas versoes e
 RF-28 [v0.1] — Definicao de sessao de pesquisa
 Cada pesquisa iniciada pelo utilizador cria uma nova sessao de pesquisa. A sessao anterior e considerada encerrada no momento em que uma nova pesquisa e iniciada.
 
-RF-29 [v0.1] — Conteudo e estados do historico de sessao
+RF-29 — Conteudo e estados do historico de sessao
 O Historico deve guardar por sessao: metadados (data/hora, origem, raio), snapshot de contexto (perfil de viatura e parametros/filtros), resultados apresentados (incluindo score e ordenacao), e acoes do utilizador (detalhe aberto, navegar, copiar). O estado da sessao deve suportar, no minimo: ignorado, visitado e pernoita confirmada.
 
 RF-30 [v0.1] — Mapa de navegacao e operacao documentado
@@ -112,6 +112,12 @@ A versao 0.1 deve definir as entidades base (modelo de dados e atributos essenci
 
 RF-32 [v0.1] — Baseline de design da interface
 A versao 0.1 deve fechar o design base da interface (estrutura visual dos ecras, componentes principais, hierarquia de informacao e comportamento dos estados vazios/carregamento/erro) para permitir implementacao consistente nas versoes seguintes.
+
+RF-33 - Traçar o trajeto entre os locais
+Poder navegar pelos locais sugeridos de forma inteligente
+
+
+
 
 Paleta de cores (baseada no logo ParkSpotter)
   Primaria     : #3A4A5C (azul-slate escuro) — CTAs, highlights, drawer

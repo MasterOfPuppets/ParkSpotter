@@ -1,30 +1,65 @@
 ParkSpotter - Versao 0.1
 
-Foco da versao
-- Definir e fechar ecras/menus, mapa de navegacao/operacao, entidades base e baseline de design.
+RF-01 [v0.1] — Definir contexto de pesquisa
+O utilizador pode iniciar pesquisa a partir da localizacao atual (GPS) ou de um ponto escolhido no mapa.
 
-Requisitos desta versao (texto completo)
+RF-02 [v0.1] — Definir raio de recolha
+O utilizador indica um raio (ex.: 2000 m) para a pesquisa.
 
-RF-21 — Estrutura de navegacao principal
+RF-03 [v0.1] — Recolher locais brutos
+A app obtem todos os locais potencialmente estacionaveis dentro do raio definido, sem aplicar preferencias pessoais nesta fase.
+
+RF-04 [v0.1] — Guardar dataset da pesquisa
+A app mantem localmente o conjunto de resultados brutos da pesquisa ativa para permitir reprocessamento sem nova chamada remota imediata.
+
+RF-05 [v0.1] — Aplicar filtros no cliente
+Com base no dataset bruto, o utilizador pode filtrar por criterios (ex.: tipo de local, contexto urbano/natureza, nivel de infraestrutura).
+
+RF-07 [v0.1] — Recalcular em tempo real
+Ao alterar filtros/parametros, a app recalcula imediatamente filtragem + score + ordenacao sobre o dataset bruto ja recolhido.
+
+RF-08 [v0.1] — Ordenar resultados
+A app permite ordenar por score (default), distancia, e outros criterios relevantes definidos depois.
+
+RF-09 [v0.1] — Ver detalhe de local
+Ao abrir um resultado, o utilizador ve os fatores que contribuiram para o score (explicabilidade minima).
+
+RF-10 [v0.1] — Configurar perfil da viatura
+O utilizador pode criar/editar perfil da viatura (categoria, dimensoes aproximadas, nivel de discricao) para influenciar o score local.
+
+RF-11 [v0.1] — Persistir preferencias
+Filtros, parametros de scoring e perfil da viatura ficam guardados para sessoes futuras.
+
+RF-12 [v0.1] — Atualizar pesquisa sob pedido
+A app so faz nova recolha bruta quando o utilizador mudar local/raio ou pedir atualizacao explicita.
+
+RF-21 [v0.1] — Estrutura de navegacao principal
 As secoes principais da app devem estar acessiveis por menu hamburger. O detalhe de local nao e item de menu e deve ser aberto a partir de um resultado.
 
-RF-22 — Home centrada em mapa
+RF-22 [v0.1] — Home centrada em mapa
 A Home deve ser o mapa, com indicador de localizacao atual e acesso ao menu hamburger por icone.
 
-RF-23 — Pesquisa guiada por menu
+RF-23 [v0.1] — Pesquisa guiada por menu
 Ao aceder a opcao Pesquisa pelo menu, a app deve pedir ao utilizador a origem da pesquisa e o raio antes de iniciar recolha de locais brutos.
 
-RF-24 — Comportamento de resultados por sessao
-No ecrã de Resultados, apos uma pesquisa, deve ser mostrada a lista da pesquisa atual. Se ainda nao existir pesquisa na sessao atual, deve ser mostrada a lista do historico.
-
-RF-25 — Aviso legal em modal com intervalo de reapresentacao
+RF-25 [v0.1] — Aviso legal em modal com intervalo de reapresentacao
 O aviso legal deve ser apresentado em modal no arranque inicial para aceite e consulta, mas nao deve surgir em todas as aberturas da app. A app deve guardar a data/hora da ultima apresentacao e so voltar a mostrar o aviso apos um intervalo configurado (12h ou 24h).
 
-RF-26 — Menu About com informacao da aplicacao
+RF-26 [v0.1] — Menu About com informacao da aplicacao
 A app deve ter uma secao About no menu hamburger com: versao atual da app, link/entrada para consulta do aviso legal e informacao basica da aplicacao.
 
-RF-30 — Mapa de navegacao e operacao documentado
+RF-28 [v0.1] — Definicao de sessao de pesquisa
+Cada pesquisa iniciada pelo utilizador cria uma nova sessao de pesquisa. A sessao anterior e considerada encerrada no momento em que uma nova pesquisa e iniciada.
+
+RF-30 [v0.1] — Mapa de navegacao e operacao documentado
 O produto deve manter um mapa de navegacao e operacao vigente, alinhado com os requisitos atuais, para orientar implementacao e validacao de fluxos.
+
+RF-31 [v0.1] — Entidades base do produto
+A versao 0.1 deve definir as entidades base (modelo de dados e atributos essenciais), incluindo no minimo: SearchSession, PlaceResult, VehicleProfile, UserPreferences e HistoryEntry.
+
+RF-32 [v0.1] — Baseline de design da interface
+A versao 0.1 deve fechar o design base da interface (estrutura visual dos ecras, componentes principais, hierarquia de informacao e comportamento dos estados vazios/carregamento/erro) para permitir implementacao consistente nas versoes seguintes.
+
 
 Mapa de navegacao e operacao (baseline v0.1)
 - Arranque: modal de Aviso Legal (primeiro arranque) -> Home (Mapa).
@@ -36,15 +71,11 @@ Mapa de navegacao e operacao (baseline v0.1)
 - Detalhe: fatores de score + acao de navegacao.
 - Preferencias: perfil de viatura + parametros de filtros/scoring + raio default.
 - Historico: sessoes com estados ignorado/visitado/pernoita confirmada.
-- About: versao atual, aviso legal.
-
+- About: versao atual, aviso legal, verificacao de atualizacoes.
 Regras operacionais (baseline v0.1)
 - 1 pesquisa = 1 sessao; nova pesquisa encerra a sessao anterior.
 - Recolha retorna dados brutos; filtros/ranking/score sao sempre calculados no cliente.
 - Navegacao externa tenta abrir app de mapas com rota; fallback por copia de destino.
 
-RF-31 — Entidades base do produto
-A versao 0.1 deve definir as entidades base (modelo de dados e atributos essenciais), incluindo no minimo: SearchSession, PlaceResult, VehicleProfile, UserPreferences e HistoryEntry.
 
-RF-32 — Baseline de design da interface
-A versao 0.1 deve fechar o design base da interface (estrutura visual dos ecras, componentes principais, hierarquia de informacao e comportamento dos estados vazios/carregamento/erro) para permitir implementacao consistente nas versoes seguintes.
+

@@ -12,11 +12,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
@@ -31,6 +34,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -50,7 +54,6 @@ import com.masterofpuppets.parkspotter.ui.search.SearchScreen
 import com.masterofpuppets.parkspotter.ui.search.SearchResultsMapScreen
 import com.masterofpuppets.parkspotter.ui.search.SearchSessionState
 import com.masterofpuppets.parkspotter.ui.search.SearchUiSettings
-import com.masterofpuppets.parkspotter.ui.search.SearchOriginMode
 import com.masterofpuppets.parkspotter.ui.search.SearchContext
 import com.masterofpuppets.parkspotter.ui.search.SearchSortMode
 import com.masterofpuppets.parkspotter.ui.search.defaultSearchTypes
@@ -61,6 +64,7 @@ import kotlinx.coroutines.launch
 
 private const val LEGAL_PREFS_NAME = "legal_notice_prefs"
 private const val LEGAL_LAST_SHOWN_KEY = "legal_last_shown_at"
+private const val LEGAL_DONT_SHOW_AGAIN_KEY = "legal_dont_show_again"
 private const val LEGAL_SHOW_INTERVAL_MS = 24L * 60L * 60L * 1000L
 private const val APP_SETTINGS_PREFS_NAME = "app_settings_prefs"
 private const val RESULTS_PAGE_SIZE_KEY = "results_page_size"
@@ -76,8 +80,17 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences(LEGAL_PREFS_NAME, MODE_PRIVATE)
         val appSettingsPrefs = getSharedPreferences(APP_SETTINGS_PREFS_NAME, MODE_PRIVATE)
         val lastShownAt = prefs.getLong(LEGAL_LAST_SHOWN_KEY, 0L)
+        val dontShowAgain = prefs.getBoolean(LEGAL_DONT_SHOW_AGAIN_KEY, false)
         val now = System.currentTimeMillis()
-        val shouldShowLegal = lastShownAt == 0L || now - lastShownAt >= LEGAL_SHOW_INTERVAL_MS
+        val isIntervalPassed = lastShownAt == 0L || now - lastShownAt >= LEGAL_SHOW_INTERVAL_MS
+        
+        val shouldShowLegalDialog = isIntervalPassed && !dontShowAgain
+        val shouldShowLegalSnackbar = isIntervalPassed && dontShowAgain
+
+        if (isIntervalPassed && dontShowAgain) {
+            prefs.edit { putLong(LEGAL_LAST_SHOWN_KEY, now) }
+        }
+
         val initialSearchSettings = SearchUiSettings(
             resultsPageSize = appSettingsPrefs.getInt(RESULTS_PAGE_SIZE_KEY, 10),
             warnIfResultsAbove = appSettingsPrefs.getInt(WARN_IF_RESULTS_ABOVE_KEY, 150),
@@ -88,10 +101,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             ParkSpotterTheme {
                 ParkSpotterApp(
-                    showLegalOnStart = shouldShowLegal,
+                    showLegalOnStart = shouldShowLegalDialog,
+                    showLegalSnackbarOnStart = shouldShowLegalSnackbar,
                     initialSearchSettings = initialSearchSettings,
-                    onLegalDismissed = {
-                        prefs.edit { putLong(LEGAL_LAST_SHOWN_KEY, System.currentTimeMillis()) }
+                    onLegalDismissed = { checkedDontShowAgain ->
+                        prefs.edit { 
+                            putLong(LEGAL_LAST_SHOWN_KEY, System.currentTimeMillis())
+                            putBoolean(LEGAL_DONT_SHOW_AGAIN_KEY, checkedDontShowAgain)
+                        }
                     },
                     onSearchSettingsChanged = { updated ->
                         appSettingsPrefs.edit {
@@ -118,8 +135,9 @@ private enum class AppScreen(val titleRes: Int) {
 @Composable
 private fun ParkSpotterApp(
     showLegalOnStart: Boolean,
+    showLegalSnackbarOnStart: Boolean,
     initialSearchSettings: SearchUiSettings,
-    onLegalDismissed: () -> Unit,
+    onLegalDismissed: (Boolean) -> Unit,
     onSearchSettingsChanged: (SearchUiSettings) -> Unit,
 ) {
     val drawerState = rememberDrawerState(initialValue = androidx.compose.material3.DrawerValue.Closed)
@@ -194,7 +212,10 @@ private fun ParkSpotterApp(
             ) {
                 val currentSearchSession = searchSession
                 when (currentScreen) {
-                    AppScreen.Home -> HomeMapScreen(modifier = Modifier.fillMaxSize())
+                    AppScreen.Home -> HomeMapScreen(
+                        modifier = Modifier.fillMaxSize(),
+                        snackbarHostState = snackbarHostState,
+                    )
                     AppScreen.Search -> if (showSearchMap && currentSearchSession != null) {
                         val pageSize = searchSettings.resultsPageSize
                         val singleResult = selectedResultForMap
@@ -314,11 +335,18 @@ private fun ParkSpotterApp(
 
     if (showLegalDialog) {
         LegalNoticeDialog(
-            onDismiss = {
+            onDismiss = { dontShowAgain ->
                 showLegalDialog = false
-                onLegalDismissed()
+                onLegalDismissed(dontShowAgain)
             },
         )
+    }
+
+    val reminderMessage = stringResource(R.string.legal_reminder_snackbar)
+    LaunchedEffect(showLegalSnackbarOnStart) {
+        if (showLegalSnackbarOnStart) {
+            snackbarHostState.showSnackbar(message = reminderMessage)
+        }
     }
 }
 
@@ -338,8 +366,9 @@ private fun ScreenPlaceholder(
 }
 
 @Composable
-private fun LegalNoticeDialog(onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss) {
+private fun LegalNoticeDialog(onDismiss: (Boolean) -> Unit) {
+    var dontShowAgain by remember { mutableStateOf(false) }
+    Dialog(onDismissRequest = { onDismiss(dontShowAgain) }) {
         Surface(shape = RoundedCornerShape(20.dp)) {
             Column(
                 modifier = Modifier.padding(24.dp),
@@ -354,7 +383,23 @@ private fun LegalNoticeDialog(onDismiss: () -> Unit) {
                     text = stringResource(R.string.legal_body),
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                TextButton(onClick = onDismiss) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { dontShowAgain = !dontShowAgain }
+                        .padding(vertical = 8.dp)
+                ) {
+                    Checkbox(
+                        checked = dontShowAgain,
+                        onCheckedChange = { dontShowAgain = it }
+                    )
+                    Text(text = stringResource(R.string.legal_dont_show_again))
+                }
+                TextButton(
+                    onClick = { onDismiss(dontShowAgain) },
+                    modifier = Modifier.align(Alignment.End)
+                ) {
                     Text(text = stringResource(R.string.action_acknowledge))
                 }
             }
@@ -368,6 +413,7 @@ private fun ParkSpotterAppPreview() {
     ParkSpotterTheme {
         ParkSpotterApp(
             showLegalOnStart = true,
+            showLegalSnackbarOnStart = false,
             initialSearchSettings = SearchUiSettings(),
             onLegalDismissed = {},
             onSearchSettingsChanged = {},

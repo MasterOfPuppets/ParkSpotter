@@ -9,6 +9,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,7 +39,10 @@ import org.osmdroid.views.overlay.Marker
 import kotlin.coroutines.resume
 
 @Composable
-fun HomeMapScreen(modifier: Modifier = Modifier) {
+fun HomeMapScreen(
+    modifier: Modifier = Modifier,
+    snackbarHostState: SnackbarHostState,
+) {
     val context = LocalContext.current
     var currentLocation by remember { mutableStateOf<Location?>(null) }
     var hasLocationPermission by remember { mutableStateOf(hasLocationPermission(context)) }
@@ -50,6 +55,9 @@ fun HomeMapScreen(modifier: Modifier = Modifier) {
         hasLocationPermission = hasLocationPermission(context)
     }
 
+    val permissionMsg = stringResource(R.string.home_location_permission_required)
+    val unavailableMsg = stringResource(R.string.home_location_unavailable)
+
     LaunchedEffect(hasLocationPermission) {
         if (!hasLocationPermission) {
             permissionLauncher.launch(
@@ -58,10 +66,14 @@ fun HomeMapScreen(modifier: Modifier = Modifier) {
                     Manifest.permission.ACCESS_COARSE_LOCATION,
                 ),
             )
+            snackbarHostState.showSnackbar(permissionMsg)
         } else {
             isLocating = true
             currentLocation = fetchCurrentLocationWithRetry(context)
             isLocating = false
+            if (currentLocation == null) {
+                snackbarHostState.showSnackbar(unavailableMsg)
+            }
         }
     }
 
@@ -111,23 +123,9 @@ fun HomeMapScreen(modifier: Modifier = Modifier) {
             },
         )
 
-        if (!hasLocationPermission) {
-            Text(
-                text = stringResource(R.string.home_location_permission_required),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.align(Alignment.TopCenter),
-            )
-        } else if (isLocating) {
-            Text(
-                text = stringResource(R.string.home_location_fetching),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.align(Alignment.TopCenter),
-            )
-        } else if (currentLocation == null) {
-            Text(
-                text = stringResource(R.string.home_location_unavailable),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.align(Alignment.TopCenter),
+        if (isLocating) {
+            CircularProgressIndicator(
+                modifier = Modifier.align(Alignment.Center)
             )
         }
     }

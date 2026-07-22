@@ -77,10 +77,17 @@
     <string name="search_radius_preview_distance">Current radius: %1$d m</string>
     <string name="search_error_template">Error: %1$s</string>
     <string name="search_error_api_failed">The map servers are currently busy or unavailable. Please wait a few seconds and try again. [Code: %1$s]</string>
+    <string name="search_manual_location_label">Coordinates (Lat, Lon)</string>
+    <string name="search_map_picker_title">Select location</string>
+    <string name="search_map_picker_ok">OK</string>
+    <string name="search_map_picker_cancel">Cancel</string>
+    <string name="search_btn_current_location">Current Location</string>
+    <string name="search_btn_choose_map">Choose in map</string>
     <string name="search_error_invalid_radius">Please enter a valid radius in meters.</string>
     <string name="search_error_location_permission">Location permission is required to use current location as origin.</string>
     <string name="search_error_location_unavailable">Current location is unavailable right now.</string>
     <string name="search_error_invalid_coordinates">Please enter valid latitude and longitude values.</string>
+    <string name="search_error_invalid_coordinates_format">Invalid coordinates format</string>
     <string name="search_results_count">%1$d results in current session</string>
     <string name="search_session_summary_template">Session: %1$.6f, %2$.6f • %3$d m • %4$s</string>
     <string name="search_edit_session_button">Edit search settings</string>
@@ -109,6 +116,8 @@
 
     <string name="legal_title">Legal notice</string>
     <string name="legal_body">You are solely responsible for legal parking and overnight decisions. This app does not guarantee legality, safety, or accuracy of suggested places.</string>
+    <string name="legal_dont_show_again">Do not repeat this warning</string>
+    <string name="legal_reminder_snackbar">Reminder: Terms and conditions are available in the About page</string>
     <string name="spike_title">OSM Spike — Parking Search</string>
     <string name="spike_coords">Origin: %1$.6f, %2$.6f | Radius: %3$dm</string>
     <string name="spike_run">Run search</string>

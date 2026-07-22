@@ -2,7 +2,6 @@ package com.masterofpuppets.parkspotter.ui.search
 
 import android.Manifest
 import android.content.Context
-import android.util.Log
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
@@ -17,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,6 +26,19 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
+import org.osmdroid.events.MapListener
+import org.osmdroid.events.ScrollEvent
+import org.osmdroid.events.ZoomEvent
+import org.osmdroid.views.CustomZoomButtonsController
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,8 +58,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -59,6 +74,13 @@ import com.masterofpuppets.parkspotter.spike.ApiPlaceType
 import com.masterofpuppets.parkspotter.spike.OverpassClient
 import com.masterofpuppets.parkspotter.spike.OverpassElement
 import kotlinx.coroutines.launch
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -70,7 +92,75 @@ import kotlin.math.cos
 import kotlin.math.log2
 import kotlin.math.min
 import kotlin.math.sin
+import kotlin.math.abs
 import kotlin.math.sqrt
+
+@Composable
+private fun CoordinatesInputCard(
+    currentQuery: String,
+    onQueryConfirmed: (String) -> Unit,
+    onInvalidFormat: () -> Unit,
+) {
+    var isEditing by remember { mutableStateOf(false) }
+    var draftQuery by remember(isEditing, currentQuery) { mutableStateOf(currentQuery) }
+    val clipboardManager = LocalClipboardManager.current
+
+    val pasteSuggestion = remember {
+        val clipText = clipboardManager.getText()?.text ?: ""
+        if (sanitizeCoordinatesString(clipText) != null) clipText else null
+    }
+
+    if (isEditing) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            OutlinedTextField(
+                value = draftQuery,
+                onValueChange = { draftQuery = it },
+                label = { Text(stringResource(R.string.search_manual_location_label)) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                trailingIcon = {
+                    Row {
+                        IconButton(onClick = { isEditing = false }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Cancel")
+                        }
+                        IconButton(onClick = {
+                            val finalQuery = if (draftQuery.isBlank()) currentQuery else draftQuery
+                            val sanitized = sanitizeCoordinatesString(finalQuery)
+                            if (sanitized != null) {
+                                onQueryConfirmed(sanitized)
+                                isEditing = false
+                            } else {
+                                onInvalidFormat()
+                            }
+                        }) {
+                            Icon(Icons.Default.Check, contentDescription = "Confirm", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+            )
+            if (pasteSuggestion != null && pasteSuggestion != draftQuery) {
+                FilterChip(
+                    selected = false,
+                    onClick = { draftQuery = pasteSuggestion },
+                    label = { Text("Paste: $pasteSuggestion") }
+                )
+            }
+        }
+    } else {
+        OutlinedTextField(
+            value = currentQuery,
+            onValueChange = { },
+            label = { Text(stringResource(R.string.search_manual_location_label)) },
+            readOnly = true,
+            modifier = Modifier.fillMaxWidth(),
+            trailingIcon = {
+                IconButton(onClick = { isEditing = true }) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit")
+                }
+            }
+        )
+    }
+}
 
 @Composable
 fun SearchScreen(
@@ -96,6 +186,7 @@ fun SearchScreen(
     var hasLocationPermission by remember { mutableStateOf(hasLocationPermission(context)) }
     var showRadiusPreview by remember { mutableStateOf(false) }
     var lastSubmittedParams by remember { mutableStateOf<SearchRequestParams?>(null) }
+    var showMapPicker by remember { mutableStateOf(false) }
 
     val warningMessage = if (currentSession?.shouldShowTooManyResultsWarning == true) {
         stringResource(
@@ -120,10 +211,29 @@ fun SearchScreen(
         }
     }
 
+    val updateCurrentLocation = {
+        if (hasLocationPermission) {
+            getBestLastKnownLocation(context)?.let {
+                formState.locationQuery = String.format(java.util.Locale.US, "%.6f, %.6f", it.latitude, it.longitude)
+            } ?: run {
+                state = SearchUiState.Error(context.getString(R.string.search_error_location_unavailable))
+            }
+        }
+    }
+
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
     ) {
         hasLocationPermission = hasLocationPermission(context)
+        if (hasLocationPermission) {
+            updateCurrentLocation()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (formState.locationQuery.isBlank() && hasLocationPermission) {
+            updateCurrentLocation()
+        }
     }
 
     val pageSize = normalizedSettings.resultsPageSize
@@ -143,25 +253,60 @@ fun SearchScreen(
         Text(text = stringResource(R.string.search_title), style = MaterialTheme.typography.headlineSmall)
 
         if (currentSession == null || isConfigExpanded) {
-            SearchOriginSelector(
-                selected = formState.originMode,
-                onSelected = { formState.originMode = it },
+            val invalidFormatMsg = stringResource(R.string.search_error_invalid_coordinates_format)
+            
+            CoordinatesInputCard(
+                currentQuery = formState.locationQuery,
+                onQueryConfirmed = { formState.locationQuery = it },
+                onInvalidFormat = {
+                    scope.launch { snackbarHostState.showSnackbar(invalidFormatMsg) }
+                }
             )
 
-            if (formState.originMode == SearchOriginMode.MANUAL_COORDINATES) {
-                OutlinedTextField(
-                    value = formState.manualLat,
-                    onValueChange = { formState.manualLat = it },
-                    label = { Text(stringResource(R.string.search_latitude_label)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = formState.manualLon,
-                    onValueChange = { formState.manualLon = it },
-                    label = { Text(stringResource(R.string.search_longitude_label)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                TextButton(onClick = {
+                    if (!hasLocationPermission) {
+                        locationPermissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION,
+                            )
+                        )
+                    } else {
+                        updateCurrentLocation()
+                    }
+                }) {
+                    Icon(Icons.Default.MyLocation, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(R.string.search_btn_current_location))
+                }
+                
+                TextButton(onClick = { showMapPicker = true }) {
+                    Icon(Icons.Default.Map, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(R.string.search_btn_choose_map))
+                }
+            }
+
+            if (showMapPicker) {
+                val currentCoords = extractCoordinatesPair(formState.locationQuery)
+                MapLocationPickerDialog(
+                    initialLat = currentCoords?.first,
+                    initialLon = currentCoords?.second,
+                    onDismiss = { showMapPicker = false },
+                    onConfirm = { lat, lon ->
+                        val newQuery = String.format(java.util.Locale.US, "%.6f, %.6f", lat, lon)
+                        formState.locationQuery = newQuery
+                        showMapPicker = false
+                    },
+                    onGetCurrentLocation = {
+                        getBestLastKnownLocation(context)?.let {
+                            GeoPoint(it.latitude, it.longitude)
+                        }
+                    }
                 )
             }
 
@@ -199,21 +344,15 @@ fun SearchScreen(
                     onClick = {
                         scope.launch {
                             val radius = formState.radiusMeters
-                            val manualCoordinates = if (formState.originMode == SearchOriginMode.MANUAL_COORDINATES) {
-                                val lat = formState.manualLat.toDoubleOrNull()
-                                val lon = formState.manualLon.toDoubleOrNull()
-                                if (lat == null || lon == null || lat !in -90.0..90.0 || lon !in -180.0..180.0) {
-                                    state = SearchUiState.Error(context.getString(R.string.search_error_invalid_coordinates))
-                                    return@launch
-                                }
-                                lat to lon
-                            } else {
-                                null
+                            val coords = extractCoordinatesPair(formState.locationQuery)
+                            if (coords == null) {
+                                state = SearchUiState.Error(context.getString(R.string.search_error_invalid_coordinates_format))
+                                return@launch
                             }
+
                             val requestParams = SearchRequestParams(
-                                originMode = formState.originMode,
-                                manualLat = manualCoordinates?.first,
-                                manualLon = manualCoordinates?.second,
+                                originLat = coords.first,
+                                originLon = coords.second,
                                 radiusMeters = radius,
                                 context = formState.selectedContext,
                                 sortMode = formState.sortMode,
@@ -230,28 +369,7 @@ fun SearchScreen(
                             onPageIndexChanged(0)
                             onSessionChanged(null)
 
-                            val origin = when (formState.originMode) {
-                            SearchOriginMode.CURRENT_LOCATION -> {
-                                if (!hasLocationPermission) {
-                                    locationPermissionLauncher.launch(
-                                        arrayOf(
-                                            Manifest.permission.ACCESS_FINE_LOCATION,
-                                            Manifest.permission.ACCESS_COARSE_LOCATION,
-                                        ),
-                                    )
-                                    state = SearchUiState.Error(context.getString(R.string.search_error_location_permission))
-                                    return@launch
-                                }
-                                getBestLastKnownLocation(context)?.let { it.latitude to it.longitude }
-                                    ?: run {
-                                        state = SearchUiState.Error(context.getString(R.string.search_error_location_unavailable))
-                                        return@launch
-                                    }
-                            }
-
-                            SearchOriginMode.MANUAL_COORDINATES -> manualCoordinates
-                                ?: return@launch
-                        }
+                            val origin = coords
 
                         val result = OverpassClient.queryParkingAreas(
                             lat = origin.first,
@@ -271,13 +389,6 @@ fun SearchScreen(
                                             SearchSortMode.SCORE -> list.sortedByDescending { it.score ?: 0f }
                                         }
                                     }
-
-                                // Logging the final filtered results
-                                Log.d("PARK_SPOTTER_FILTER", "=== FILTERED RESULTS (Count: ${mapped.size}) ===")
-                                mapped.forEachIndexed { index, res ->
-                                    Log.d("PARK_SPOTTER_FILTER", "RESULT[$index]: ID=${res.osmId} | TYPE=${res.osmType} | NAME=${res.name ?: "Unnamed"} | DIST=${res.distanceMeters}m | LAT=${res.latitude} | LON=${res.longitude} | TAGS=${res.tags}")
-                                }
-                                Log.d("PARK_SPOTTER_FILTER", "==============================================")
 
                                 val session = SearchSessionState(
                                     originLat = origin.first,
@@ -371,34 +482,17 @@ fun SearchScreen(
     }
 
     if (showRadiusPreview) {
+        val currentCoords = extractCoordinatesPair(formState.locationQuery)
+        val centerPoint = if (currentCoords != null) {
+            GeoPoint(currentCoords.first, currentCoords.second)
+        } else {
+            getBestLastKnownLocation(context)?.let { GeoPoint(it.latitude, it.longitude) } ?: GeoPoint(41.1496, -8.6109)
+        }
+        
         RadiusPreviewDialog(
-            origin = resolvePreviewOrigin(
-                context = context,
-                originMode = formState.originMode,
-                manualLat = formState.manualLat,
-                manualLon = formState.manualLon,
-            ),
+            origin = centerPoint,
             radiusMeters = formState.radiusMeters,
             onDismiss = { showRadiusPreview = false },
-        )
-    }
-}
-
-@Composable
-private fun SearchOriginSelector(
-    selected: SearchOriginMode,
-    onSelected: (SearchOriginMode) -> Unit,
-) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(
-            selected = selected == SearchOriginMode.CURRENT_LOCATION,
-            onClick = { onSelected(SearchOriginMode.CURRENT_LOCATION) },
-            label = { Text(stringResource(R.string.search_origin_current_location)) },
-        )
-        FilterChip(
-            selected = selected == SearchOriginMode.MANUAL_COORDINATES,
-            onClick = { onSelected(SearchOriginMode.MANUAL_COORDINATES) },
-            label = { Text(stringResource(R.string.search_origin_manual_coordinates)) },
         )
     }
 }
@@ -650,27 +744,6 @@ private fun OverpassElement.toPlaceResult(originLat: Double, originLon: Double):
     )
 }
 
-private fun resolvePreviewOrigin(
-    context: Context,
-    originMode: SearchOriginMode,
-    manualLat: String,
-    manualLon: String,
-): GeoPoint {
-    if (originMode == SearchOriginMode.MANUAL_COORDINATES) {
-        val lat = manualLat.toDoubleOrNull()
-        val lon = manualLon.toDoubleOrNull()
-        if (lat != null && lon != null && lat in -90.0..90.0 && lon in -180.0..180.0) {
-            return GeoPoint(lat, lon)
-        }
-    }
-    val current = getBestLastKnownLocation(context)
-    return if (current != null) {
-        GeoPoint(current.latitude, current.longitude)
-    } else {
-        GeoPoint(38.696728, -9.364814)
-    }
-}
-
 private fun calculateRadiusPreviewZoom(
     radiusMeters: Int,
     centerLatitude: Double,
@@ -710,14 +783,108 @@ private fun createTintedMarkerDrawable(
 }
 
 private data class SearchRequestParams(
-    val originMode: SearchOriginMode,
-    val manualLat: Double?,
-    val manualLon: Double?,
+    val originLat: Double,
+    val originLon: Double,
     val radiusMeters: Int,
     val context: SearchContext,
     val sortMode: SearchSortMode,
     val selectedTypes: Set<String>,
 )
+
+private fun sanitizeCoordinatesString(query: String): String? {
+    val cleanQuery = query.uppercase().trim()
+    val defaultFormat = java.text.NumberFormat.getInstance(java.util.Locale.getDefault())
+    val usFormat = java.text.NumberFormat.getInstance(java.util.Locale.US)
+
+    // Helper to evaluate and validate boundaries
+    fun evaluate(lat: Double?, lon: Double?): String? {
+        if (lat != null && lon != null && lat in -90.0..90.0 && lon in -180.0..180.0) {
+            return String.format(java.util.Locale.US, "%.6f, %.6f", lat, lon)
+        }
+        return null
+    }
+
+    fun parseNumberTolerant(str: String): Double? {
+        val s = str.trim()
+        if (s.isEmpty()) return null
+        val localParsed = runCatching { defaultFormat.parse(s)?.toDouble() }.getOrNull()
+        if (localParsed != null) return localParsed
+        val usParsed = runCatching { usFormat.parse(s)?.toDouble() }.getOrNull()
+        if (usParsed != null) return usParsed
+        return s.toDoubleOrNull()
+    }
+
+    val cleanDmsQuery = cleanQuery
+        .replace(Regex("[^\\d\\.\\,\\-NSEW]"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
+    val dmsRegex = Regex("^(\\d+(?:[.,]\\d+)?)\\s+(\\d+(?:[.,]\\d+)?)\\s+(\\d+(?:[.,]\\d+)?)\\s*([NS])\\s+(\\d+(?:[.,]\\d+)?)\\s+(\\d+(?:[.,]\\d+)?)\\s+(\\d+(?:[.,]\\d+)?)\\s*([EW])$")
+    dmsRegex.matchEntire(cleanDmsQuery)?.let { match ->
+        val latDeg = parseNumberTolerant(match.groupValues[1]) ?: 0.0
+        val latMin = parseNumberTolerant(match.groupValues[2]) ?: 0.0
+        val latSec = parseNumberTolerant(match.groupValues[3]) ?: 0.0
+        var lat = latDeg + latMin / 60.0 + latSec / 3600.0
+        if (match.groupValues[4] == "S") lat = -lat
+
+        val lonDeg = parseNumberTolerant(match.groupValues[5]) ?: 0.0
+        val lonMin = parseNumberTolerant(match.groupValues[6]) ?: 0.0
+        val lonSec = parseNumberTolerant(match.groupValues[7]) ?: 0.0
+        var lon = lonDeg + lonMin / 60.0 + lonSec / 3600.0
+        if (match.groupValues[8] == "W") lon = -lon
+        
+        evaluate(lat, lon)?.let { return it }
+    }
+    
+    val ddmRegex = Regex("^(\\d+(?:[.,]\\d+)?)\\s+(\\d+(?:[.,]\\d+)?)\\s*([NS])\\s+(\\d+(?:[.,]\\d+)?)\\s+(\\d+(?:[.,]\\d+)?)\\s*([EW])$")
+    ddmRegex.matchEntire(cleanDmsQuery)?.let { match ->
+        val latDeg = parseNumberTolerant(match.groupValues[1]) ?: 0.0
+        val latMin = parseNumberTolerant(match.groupValues[2]) ?: 0.0
+        var lat = latDeg + latMin / 60.0
+        if (match.groupValues[3] == "S") lat = -lat
+
+        val lonDeg = parseNumberTolerant(match.groupValues[4]) ?: 0.0
+        val lonMin = parseNumberTolerant(match.groupValues[5]) ?: 0.0
+        var lon = lonDeg + lonMin / 60.0
+        if (match.groupValues[6] == "W") lon = -lon
+        
+        evaluate(lat, lon)?.let { return it }
+    }
+    
+    val ddLettersRegex = Regex("^([-+]?\\d+(?:[.,]\\d+)?)\\s*([NS])?\\s+([-+]?\\d+(?:[.,]\\d+)?)\\s*([EW])?$")
+    ddLettersRegex.matchEntire(cleanDmsQuery)?.let { match ->
+        var lat = parseNumberTolerant(match.groupValues[1]) ?: return@let
+        if (match.groupValues[2] == "S") lat = -lat
+        var lon = parseNumberTolerant(match.groupValues[3]) ?: return@let
+        if (match.groupValues[4] == "W") lon = -lon
+        
+        evaluate(lat, lon)?.let { return it }
+    }
+
+    val numberPattern = "([-+]?\\d+(?:[.,]\\d+)?)"
+    val matcher = Regex(numberPattern).findAll(cleanQuery)
+    val numbersList = matcher.map { it.value }.toList()
+    
+    if (numbersList.size >= 2) {
+        val lat = parseNumberTolerant(numbersList[0])
+        val lon = parseNumberTolerant(numbersList[1])
+        evaluate(lat, lon)?.let { return it }
+    }
+
+    return null
+}
+
+private fun extractCoordinatesPair(query: String): Pair<Double, Double>? {
+    val parts = query.split(",").map { it.trim() }
+    if (parts.size == 2) {
+        val lat = parts[0].toDoubleOrNull()
+        val lon = parts[1].toDoubleOrNull()
+        if (lat != null && lon != null) {
+            return lat to lon
+        }
+    }
+    return null
+}
 
 private fun hasLocationPermission(context: Context): Boolean {
     val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -905,4 +1072,108 @@ private sealed interface SearchUiState {
     data object Loading : SearchUiState
     data object Success : SearchUiState
     data class Error(val message: String) : SearchUiState
+}
+
+@Composable
+fun MapLocationPickerDialog(
+    initialLat: Double?,
+    initialLon: Double?,
+    onDismiss: () -> Unit,
+    onConfirm: (Double, Double) -> Unit,
+    onGetCurrentLocation: () -> GeoPoint?
+) {
+    var mapCenter by remember {
+        mutableStateOf(GeoPoint(initialLat ?: 41.1496, initialLon ?: -8.6109))
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.8f)
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = stringResource(R.string.search_map_picker_title),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    IconButton(onClick = {
+                        val currentLoc = onGetCurrentLocation()
+                        if (currentLoc != null) {
+                            mapCenter = currentLoc
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.MyLocation,
+                            contentDescription = "My Location"
+                        )
+                    }
+                }
+
+                Box(modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
+                    AndroidView(
+                        factory = { context ->
+                            MapView(context).apply {
+                                setTileSource(TileSourceFactory.MAPNIK)
+                                setMultiTouchControls(true)
+                                zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+                                controller.setZoom(16.0)
+                                controller.setCenter(mapCenter)
+                                
+                                addMapListener(object : MapListener {
+                                    override fun onScroll(event: ScrollEvent?): Boolean {
+                                        val newCenter = GeoPoint(this@apply.mapCenter.latitude, this@apply.mapCenter.longitude)
+                                        mapCenter = newCenter
+                                        return true
+                                    }
+                                    override fun onZoom(event: ZoomEvent?): Boolean = true
+                                })
+                            }
+                        },
+                        update = { view ->
+                            val currentLat = view.mapCenter.latitude
+                            val currentLon = view.mapCenter.longitude
+                            if (abs(currentLat - mapCenter.latitude) > 1e-5 || abs(currentLon - mapCenter.longitude) > 1e-5) {
+                                view.controller.setCenter(mapCenter)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = "Center",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.search_map_picker_cancel))
+                    }
+                    Button(
+                        onClick = { onConfirm(mapCenter.latitude, mapCenter.longitude) },
+                        modifier = Modifier.padding(start = 8.dp)
+                    ) {
+                        Text(stringResource(R.string.search_map_picker_ok))
+                    }
+                }
+            }
+        }
+    }
 }
