@@ -364,8 +364,7 @@ fun SearchScreen(
                             context = context,
                             radius = formState.radiusMeters,
                             coords = coords,
-                            normalizedSettings = normalizedSettings,
-                            applySanitization = ::applySanitization
+                            normalizedSettings = normalizedSettings
                         )
                     },
                     enabled = state !is SearchUiState.Loading && !isEditingCoordinates,
@@ -680,21 +679,6 @@ private fun ApiPlaceType.labelResId(): Int = when (this) {
 
 private fun String.toApiPlaceType(): ApiPlaceType = ApiPlaceType.entries.firstOrNull { it.key == this } ?: ApiPlaceType.UNKNOWN
 
-fun OverpassElement.toPlaceResult(originLat: Double, originLon: Double): PlaceResult {
-    val distance = haversineDistanceMeters(originLat, originLon, latitude, longitude)
-    return PlaceResult(
-        osmType = type,
-        osmId = id,
-        name = displayName,
-        latitude = latitude,
-        longitude = longitude,
-        placeType = placeType.key,
-        tags = tags,
-        distanceMeters = distance,
-        score = null,
-    )
-}
-
 private fun calculateRadiusPreviewZoom(
     radiusMeters: Int,
     centerLatitude: Double,
@@ -843,175 +827,6 @@ private fun getBestLastKnownLocation(context: Context): Location? {
         .mapNotNull { provider -> runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull() }
         .maxByOrNull { it.time }
 }
-
-private fun applySanitization(results: List<PlaceResult>): List<PlaceResult> {
-    var workingList = results
-
-    // Rule 1: Exact coordinates sanitization
-    workingList = sanitizeExactDuplicates(workingList)
-
-    // Rule 2: Suppress access aisles near parking amenities (Situation 2 & 3)
-    workingList = suppressAccessAislesByProximity(workingList)
-
-    // Rule 3: Deduplicate consecutive/redundant aisles (Situation 1)
-    workingList = deduplicateRedundantAisles(workingList)
-
-    // Rule 4: Sanitize streets by isolation and survival (The "C" vs "A,B,D,E" rule)
-    workingList = sanitizeStreetsByIsolationAndSurvival(workingList)
-
-    return workingList
-}
-
-private fun sanitizeExactDuplicates(results: List<PlaceResult>): List<PlaceResult> {
-    return results.mapIndexed { index, current ->
-        if (current.isSanitized) return@mapIndexed current
-
-        val duplicate = results.subList(0, index).find { other ->
-            !other.isSanitized &&
-                    haversineDistanceMeters(current.latitude, current.longitude, other.latitude, other.longitude) < 2
-        }
-
-        if (duplicate != null) {
-            // Keep the 'way' if there's a conflict between node and way
-            if (current.osmType == "node" && duplicate.osmType == "way") {
-                current.copy(isSanitized = true, sanitizationReason = "Exact coordinate duplicate (kept way over node)")
-            } else if (current.osmType == "way" && duplicate.osmType == "node") {
-                // In this case we would have already processed the node, but since we are mapping, 
-                // we'll handle this by marking current as active and we'd need to mark the previously processed as sanitized.
-                // To keep it simple in a single pass: mark the current as sanitized if it's the \"weaker\" one.
-                current
-            } else {
-                current.copy(isSanitized = true, sanitizationReason = "Exact coordinate duplicate")
-            }
-        } else {
-            current
-        }
-    }
-}
-
-private fun suppressAccessAislesByProximity(results: List<PlaceResult>): List<PlaceResult> {
-    val parkingAmenities = results.filter { it.tags["amenity"] == "parking" && !it.isSanitized }
-
-    return results.map { current ->
-        // Only sanitize if it's a parking_aisle
-        if (current.isSanitized || current.tags["service"] != "parking_aisle") return@map current
-
-        val nearbyParking = parkingAmenities.find { parking ->
-            haversineDistanceMeters(current.latitude, current.longitude, parking.latitude, parking.longitude) <= 35
-        }
-
-        if (nearbyParking != null) {
-            current.copy(isSanitized = true, sanitizationReason = "Aisle suppressed by nearby parking amenity (${nearbyParking.osmId})")
-        } else {
-            current
-        }
-    }
-}
-
-private fun deduplicateRedundantAisles(results: List<PlaceResult>): List<PlaceResult> {
-    // Only process parking_aisles that aren't already sanitized
-    return results.mapIndexed { index, current ->
-        if (current.isSanitized || current.tags["service"] != "parking_aisle") return@mapIndexed current
-
-        // Look for other parking_aisles nearby (within 35m) that are already processed and NOT sanitized
-        val nearbyAisle = results.subList(0, index).find { other ->
-            !other.isSanitized &&
-                    other.tags["service"] == "parking_aisle" &&
-                    haversineDistanceMeters(current.latitude, current.longitude, other.latitude, other.longitude) <= 35
-        }
-
-        if (nearbyAisle != null) {
-            // Rule 1 Logic: Keep the one further from origin
-            if (current.distanceMeters > nearbyAisle.distanceMeters) {
-                // We want to keep the current one. But the 'nearbyAisle' was already mapped as NOT sanitized.
-                // This is a limitation of a single-pass map.
-                // Let's refine the strategy: mark for sanitization if there is a 'better' one anywhere in the list.
-                current
-            } else {
-                current.copy(isSanitized = true, sanitizationReason = "Redundant aisle (kept one further from origin)")
-            }
-        } else {
-            // Check if there is a better candidate LATER in the list to avoid keeping a sub-optimal one
-            val betterAisleLater = results.subList(index + 1, results.size).find { other ->
-                other.tags["service"] == "parking_aisle" &&
-                        haversineDistanceMeters(current.latitude, current.longitude, other.latitude, other.longitude) <= 35 &&
-                        other.distanceMeters > current.distanceMeters
-            }
-            if (betterAisleLater != null) {
-                current.copy(isSanitized = true, sanitizationReason = "Redundant aisle (better candidate exists)")
-            } else {
-                current
-            }
-        }
-    }
-}
-
-private fun sanitizeStreetsByIsolationAndSurvival(results: List<PlaceResult>): List<PlaceResult> {
-    val streetResults = results.filter { it.placeType == ApiPlaceType.STREET.key && !it.isSanitized }
-    if (streetResults.isEmpty()) return results
-
-    // Group by street name (ignore unnamed for this specific logic)
-    val groupedByStreet = streetResults.filter { !it.name.isNullOrBlank() }.groupBy { it.name }
-    val sanitizedIds = mutableSetOf<Long>()
-    val savedIds = mutableSetOf<Long>()
-
-    groupedByStreet.forEach { (_, pins) ->
-        if (pins.size <= 1) return@forEach // Only one pin, it's naturally isolated
-
-        // Identify which pins are clustered (< 35m from any other pin in the same street)
-        val clusteredPins = pins.filter { current ->
-            pins.any { other ->
-                current.osmId != other.osmId &&
-                        haversineDistanceMeters(current.latitude, current.longitude, other.latitude, other.longitude) < 35
-            }
-        }
-        val isolatedPins = pins.filter { it !in clusteredPins }
-
-        if (isolatedPins.isNotEmpty()) {
-            // Rule: If there are isolated pins, they stay. All clustered pins disappear.
-            clusteredPins.forEach { sanitizedIds.add(it.osmId) }
-        } else {
-            // Survival Routine: No isolated pins exist for this street.
-            // All would disappear, so we save the single richest one.
-            val richestPin = clusteredPins.maxByOrNull { it.tags.size }
-            if (richestPin != null) {
-                clusteredPins.forEach { pin ->
-                    if (pin.osmId != richestPin.osmId) {
-                        sanitizedIds.add(pin.osmId)
-                    } else {
-                        savedIds.add(pin.osmId)
-                    }
-                }
-            }
-        }
-    }
-
-    return results.map { res ->
-        if (sanitizedIds.contains(res.osmId) && !savedIds.contains(res.osmId)) {
-            res.copy(isSanitized = true, sanitizationReason = "Clustered street segment suppressed by isolation rule")
-        } else {
-            res
-        }
-    }
-}
-
-private fun haversineDistanceMeters(
-    lat1: Double,
-    lon1: Double,
-    lat2: Double,
-    lon2: Double,
-): Int {
-    val earthRadius = 6371000.0
-    val dLat = Math.toRadians(lat2 - lat1)
-    val dLon = Math.toRadians(lon2 - lon1)
-    val a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
-        sin(dLon / 2) * sin(dLon / 2)
-    val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-    return (earthRadius * c).toInt()
-}
-
-
 
 @Composable
 fun MapLocationPickerDialog(

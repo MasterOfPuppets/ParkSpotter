@@ -183,9 +183,12 @@ private fun ParkSpotterApp(
     var showLegalDialog by rememberSaveable { mutableStateOf(showLegalOnStart) }
     var searchSettings by rememberSaveable(stateSaver = searchUiSettingsSaver) { mutableStateOf(initialSearchSettings) }
     
-    val searchViewModel: SearchViewModel = viewModel()
-    
     val app = LocalContext.current.applicationContext as ParkSpotterApplication
+    
+    val searchViewModel: SearchViewModel = viewModel(
+        factory = SearchViewModel.provideFactory(app.searchService)
+    )
+
     val vehicleManageViewModel: VehicleManageViewModel = viewModel(
         factory = VehicleManageViewModel.provideFactory(app.vehicleService)
     )

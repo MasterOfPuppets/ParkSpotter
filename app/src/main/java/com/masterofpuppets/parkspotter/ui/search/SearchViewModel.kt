@@ -6,12 +6,12 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.masterofpuppets.parkspotter.R
 import com.masterofpuppets.parkspotter.domain.model.PlaceResult
-import com.masterofpuppets.parkspotter.spike.OverpassClient
+import com.masterofpuppets.parkspotter.domain.service.SearchService
 import kotlinx.coroutines.launch
-import org.osmdroid.util.GeoPoint
 
 sealed interface SearchUiState {
     data object Idle : SearchUiState
@@ -29,7 +29,9 @@ data class SearchRequestParams(
     val selectedTypes: Set<String>,
 )
 
-class SearchViewModel : ViewModel() {
+class SearchViewModel(
+    private val searchService: SearchService
+) : ViewModel() {
 
     var searchSession by mutableStateOf<SearchSessionState?>(null)
     var showSearchMap by mutableStateOf(false)
@@ -66,8 +68,7 @@ class SearchViewModel : ViewModel() {
         context: Context,
         radius: Int,
         coords: Pair<Double, Double>,
-        normalizedSettings: SearchUiSettings,
-        applySanitization: (List<PlaceResult>) -> List<PlaceResult>
+        normalizedSettings: SearchUiSettings
     ) {
         val requestParams = SearchRequestParams(
             originLat = coords.first,
@@ -90,32 +91,23 @@ class SearchViewModel : ViewModel() {
         lastSubmittedParams = requestParams
 
         viewModelScope.launch {
-            val result = OverpassClient.queryParkingAreas(
+            val result = searchService.performSearch(
                 lat = coords.first,
                 lon = coords.second,
                 radiusMeters = radius,
+                selectedTypes = searchFormState.selectedTypes,
+                sortMode = searchFormState.sortMode
             )
 
             uiState = result.fold(
-                onSuccess = { elements ->
-                    val mapped = elements
-                        .filter { searchFormState.selectedTypes.contains(it.placeType) }
-                        .map { it.toPlaceResult(coords.first, coords.second) }
-                        .let { applySanitization(it) }
-                        .let { list ->
-                            when (searchFormState.sortMode) {
-                                SearchSortMode.DISTANCE -> list.sortedBy { it.distanceMeters }
-                                SearchSortMode.SCORE -> list.sortedByDescending { it.score ?: 0f }
-                            }
-                        }
-
+                onSuccess = { mappedAndSanitized ->
                     searchSession = SearchSessionState(
                         originLat = coords.first,
                         originLon = coords.second,
                         radiusMeters = radius,
                         context = searchFormState.selectedContext,
-                        allResults = mapped,
-                        shouldShowTooManyResultsWarning = mapped.size > normalizedSettings.warnIfResultsAbove,
+                        allResults = mappedAndSanitized,
+                        shouldShowTooManyResultsWarning = mappedAndSanitized.size > normalizedSettings.warnIfResultsAbove,
                     )
                     
                     isSearchConfigExpanded = false
@@ -133,5 +125,18 @@ class SearchViewModel : ViewModel() {
                 }
             )
         }
+    }
+
+    companion object {
+        fun provideFactory(searchService: SearchService): ViewModelProvider.Factory =
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    if (modelClass.isAssignableFrom(SearchViewModel::class.java)) {
+                        return SearchViewModel(searchService) as T
+                    }
+                    throw IllegalArgumentException("Unknown ViewModel class")
+                }
+            }
     }
 }

@@ -4,6 +4,8 @@ import android.app.Application
 import com.masterofpuppets.parkspotter.data.local.ParkSpotterDatabase
 import com.masterofpuppets.parkspotter.data.repository.RoomVehicleRepository
 import com.masterofpuppets.parkspotter.domain.repository.VehicleRepository
+import com.masterofpuppets.parkspotter.domain.service.SearchService
+import com.masterofpuppets.parkspotter.domain.service.SearchServiceImpl
 import com.masterofpuppets.parkspotter.domain.service.VehicleService
 import com.masterofpuppets.parkspotter.domain.service.VehicleServiceImpl
 
@@ -19,9 +21,14 @@ class ParkSpotterApplication : Application() {
         RoomVehicleRepository(database, database.vehicleDao())
     }
 
-    // Lazy initialization of service
+    // Lazy initialization of vehicle service
     val vehicleService: VehicleService by lazy {
         VehicleServiceImpl(vehicleRepository)
+    }
+
+    // Lazy initialization of search service
+    val searchService: SearchService by lazy {
+        SearchServiceImpl()
     }
 
     override fun onCreate() {
