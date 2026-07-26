@@ -6,9 +6,7 @@ Unlike other applications, ParkSpotter downloads raw data from OpenStreetMap (OS
 
 ## Features (v0.1 Baseline)
 - Map-Centric Interface: Explore your surroundings using an interactive map (OSM).
-- Local Scoring: Spots are rated based on your vehicle profile and preferences (urban, nature, infrastructure).
-- Privacy First: No cloud synchronization by default. Your history stays on your phone.
-- Search Sessions: Organize your scouting by sessions, keeping track of visited and confirmed spots.
+- Privacy First: No cloud synchronization by default.
 - Legal and Safety: Built-in legal notice system to ensure responsible parking.
 
 ## Tech Stack

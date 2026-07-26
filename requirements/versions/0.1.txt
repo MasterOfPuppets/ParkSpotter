@@ -25,7 +25,7 @@ RF-09 [v0.1] — Ver detalhe de local
 Ao abrir um resultado, o utilizador ve os fatores que contribuiram para o score (explicabilidade minima).
 
 RF-10 [v0.1] — Configurar perfil da viatura
-O utilizador pode criar/editar perfil da viatura (categoria, dimensoes aproximadas, nivel de discricao) para influenciar o score local.
+O utilizador pode criar/editar viaturas (categoria, dimensoes aproximadas, nivel de discricao) para influenciar o score local e escolher uma delas como a viatura atual.
 
 RF-11 [v0.1] — Persistir preferencias
 Filtros, parametros de scoring e perfil da viatura ficam guardados para sessoes futuras.
@@ -64,14 +64,15 @@ A versao 0.1 deve fechar o design base da interface (estrutura visual dos ecras,
 Mapa de navegacao e operacao (baseline v0.1)
 - Arranque: modal de Aviso Legal (primeiro arranque) -> Home (Mapa).
 - Menu hamburger: Home, Pesquisa, Preferencias, Historico, About.
-- Home (Mapa): localizacao atual + icone hamburger para abrir menu.
+- Home (Mapa): localizacao atual + icone hamburger para abrir menu + zoom.
 - Pesquisa (menu): escolher origem + raio -> recolha de dataset bruto.
-- Resultados: apos pesquisa mostra pesquisa atual; sem pesquisa na sessao atual mostra Historico.
+- Resultados: apos pesquisa mostra pesquisa atual.
 - Item de resultado: abrir Detalhe, Navegar, Copiar morada/coordenadas.
 - Detalhe: fatores de score + acao de navegacao.
-- Preferencias: perfil de viatura + parametros de filtros/scoring + raio default.
-- Historico: sessoes com estados ignorado/visitado/pernoita confirmada.
+- Preferencias: Escolha e gestão de viaturas + parametros de filtros/scoring + raio default.
+- Historico: Future version
 - About: versao atual, aviso legal, verificacao de atualizacoes.
+
 Regras operacionais (baseline v0.1)
 - 1 pesquisa = 1 sessao; nova pesquisa encerra a sessao anterior.
 - Recolha retorna dados brutos; filtros/ranking/score sao sempre calculados no cliente.

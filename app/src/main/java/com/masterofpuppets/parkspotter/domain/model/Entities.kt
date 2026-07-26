@@ -35,8 +35,7 @@ data class UserProfile(
     val id: String = UUID.randomUUID().toString(),
     val tier: UserTier = UserTier.FREE,
     val createdAt: Long = System.currentTimeMillis(),
-    val vehicleProfiles: List<VehicleProfile> = emptyList(),
-    val activeVehicleProfileId: String? = null
+    val vehicleProfiles: List<VehicleProfile> = emptyList()
 )
 
 enum class UserTier {
@@ -45,15 +44,36 @@ enum class UserTier {
 
 data class VehicleProfile(
     val id: String = UUID.randomUUID().toString(),
-    val name: String,
+    val make: String? = null,
+    val model: String? = null,
+    val color: String? = null,
+    val registration: String? = null,
     val category: VehicleCategory,
     val lengthMeters: Float? = null,
     val heightMeters: Float? = null,
-    val discretionLevel: DiscretionLevel
-)
+    val discretionLevel: DiscretionLevel,
+    val isBranded: Boolean = false,
+    val isActive: Boolean = false
+) {
+    fun isValid(): Boolean {
+        return !make.isNullOrBlank() || 
+               !model.isNullOrBlank() || 
+               !color.isNullOrBlank() || 
+               !registration.isNullOrBlank()
+    }
+}
 
 enum class VehicleCategory {
-    CAR, VAN, MOTORHOME, MOTORCYCLE
+    CITY_CAR,
+    SEDAN,
+    STATION_WAGON,
+    SUV,
+    MINIVAN,
+    VAN,
+    PICKUP_TRUCK,
+    CAMPERVAN,
+    MOTORHOME,
+    CARAVAN
 }
 
 enum class DiscretionLevel {

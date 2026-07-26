@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
@@ -59,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clipToBounds
@@ -100,10 +102,16 @@ private fun CoordinatesInputCard(
     currentQuery: String,
     onQueryConfirmed: (String) -> Unit,
     onInvalidFormat: () -> Unit,
+    onEditingStateChanged: (Boolean) -> Unit,
 ) {
     var isEditing by remember { mutableStateOf(false) }
     var draftQuery by remember(isEditing, currentQuery) { mutableStateOf(currentQuery) }
     val clipboardManager = LocalClipboardManager.current
+
+    // Notifica o pai quando o estado de edição muda
+    LaunchedEffect(isEditing) {
+        onEditingStateChanged(isEditing)
+    }
 
     val pasteSuggestion = remember {
         val clipText = clipboardManager.getText()?.text ?: ""
@@ -165,15 +173,8 @@ private fun CoordinatesInputCard(
 @Composable
 fun SearchScreen(
     modifier: Modifier = Modifier,
+    viewModel: SearchViewModel,
     settings: SearchUiSettings,
-    formState: SearchFormState,
-    currentSession: SearchSessionState?,
-    isConfigExpanded: Boolean,
-    onConfigExpandedChanged: (Boolean) -> Unit,
-    pageIndex: Int,
-    onPageIndexChanged: (Int) -> Unit,
-    onResultClick: (PlaceResult) -> Unit,
-    onSessionChanged: (SearchSessionState?) -> Unit,
     onOpenMap: () -> Unit,
     snackbarHostState: SnackbarHostState,
 ) {
@@ -182,10 +183,16 @@ fun SearchScreen(
     val normalizedSettings = settings.normalized()
     val minRadius = normalizedSettings.minRadiusMeters
     val maxRadius = normalizedSettings.maxRadiusMeters
-    var state by remember { mutableStateOf<SearchUiState>(SearchUiState.Idle) }
+    
+    viewModel.initFormState(minRadius)
+    val formState = viewModel.searchFormState
+    val currentSession = viewModel.searchSession
+    val isConfigExpanded = viewModel.isSearchConfigExpanded
+    val pageIndex = viewModel.searchPageIndex
+    val state = viewModel.uiState
+
     var hasLocationPermission by remember { mutableStateOf(hasLocationPermission(context)) }
     var showRadiusPreview by remember { mutableStateOf(false) }
-    var lastSubmittedParams by remember { mutableStateOf<SearchRequestParams?>(null) }
     var showMapPicker by remember { mutableStateOf(false) }
 
     val warningMessage = if (currentSession?.shouldShowTooManyResultsWarning == true) {
@@ -206,8 +213,7 @@ fun SearchScreen(
         if (state is SearchUiState.Error) {
             val errorMessage = (state as SearchUiState.Error).message
             snackbarHostState.showSnackbar(errorMessage)
-            // Optional: reset state to idle so it doesn't trigger again on recomposition
-            state = SearchUiState.Idle
+            viewModel.resetState()
         }
     }
 
@@ -216,10 +222,12 @@ fun SearchScreen(
             getBestLastKnownLocation(context)?.let {
                 formState.locationQuery = String.format(java.util.Locale.US, "%.6f, %.6f", it.latitude, it.longitude)
             } ?: run {
-                state = SearchUiState.Error(context.getString(R.string.search_error_location_unavailable))
+                viewModel.setError(context.getString(R.string.search_error_location_unavailable))
             }
         }
     }
+
+    var isEditingCoordinates by remember { mutableStateOf(false) }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
@@ -247,7 +255,8 @@ fun SearchScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(text = stringResource(R.string.search_title), style = MaterialTheme.typography.headlineSmall)
@@ -260,6 +269,9 @@ fun SearchScreen(
                 onQueryConfirmed = { formState.locationQuery = it },
                 onInvalidFormat = {
                     scope.launch { snackbarHostState.showSnackbar(invalidFormatMsg) }
+                },
+                onEditingStateChanged = { isEditing ->
+                    isEditingCoordinates = isEditing
                 }
             )
 
@@ -342,91 +354,30 @@ fun SearchScreen(
 
                 Button(
                     onClick = {
-                        scope.launch {
-                            val radius = formState.radiusMeters
-                            val coords = extractCoordinatesPair(formState.locationQuery)
-                            if (coords == null) {
-                                state = SearchUiState.Error(context.getString(R.string.search_error_invalid_coordinates_format))
-                                return@launch
-                            }
-
-                            val requestParams = SearchRequestParams(
-                                originLat = coords.first,
-                                originLon = coords.second,
-                                radiusMeters = radius,
-                                context = formState.selectedContext,
-                                sortMode = formState.sortMode,
-                                selectedTypes = formState.selectedTypes.map { it.key }.toSet(),
-                            )
-
-                            if (currentSession != null && requestParams == lastSubmittedParams) {
-                                onConfigExpandedChanged(false)
-                                state = SearchUiState.Success
-                                return@launch
-                            }
-
-                            state = SearchUiState.Loading
-                            onPageIndexChanged(0)
-                            onSessionChanged(null)
-
-                            val origin = coords
-
-                        val result = OverpassClient.queryParkingAreas(
-                            lat = origin.first,
-                            lon = origin.second,
-                            radiusMeters = radius,
+                        val coords = extractCoordinatesPair(formState.locationQuery)
+                        if (coords == null) {
+                            viewModel.setError(context.getString(R.string.search_error_invalid_coordinates_format))
+                            return@Button
+                        }
+                        
+                        viewModel.executeSearch(
+                            context = context,
+                            radius = formState.radiusMeters,
+                            coords = coords,
+                            normalizedSettings = normalizedSettings,
+                            applySanitization = ::applySanitization
                         )
-
-                        state = result.fold(
-                            onSuccess = { elements ->
-                                val mapped = elements
-                                    .filter { formState.selectedTypes.contains(it.placeType) }
-                                    .map { it.toPlaceResult(origin.first, origin.second) }
-                                    .let { applySanitization(it) }
-                                    .let { list ->
-                                        when (formState.sortMode) {
-                                            SearchSortMode.DISTANCE -> list.sortedBy { it.distanceMeters }
-                                            SearchSortMode.SCORE -> list.sortedByDescending { it.score ?: 0f }
-                                        }
-                                    }
-
-                                val session = SearchSessionState(
-                                    originLat = origin.first,
-                                    originLon = origin.second,
-                                    radiusMeters = radius,
-                                    context = formState.selectedContext,
-                                    allResults = mapped,
-                                    shouldShowTooManyResultsWarning = mapped.size > normalizedSettings.warnIfResultsAbove,
-                                )
-                                onSessionChanged(session)
-                                lastSubmittedParams = requestParams
-                                onConfigExpandedChanged(false)
-                                SearchUiState.Success
-                            },
-                            onFailure = {
-                                val msg = it.message ?: ""
-                                val displayError = if (msg.startsWith("HTTP_")) {
-                                    val code = msg.removePrefix("HTTP_")
-                                    context.getString(R.string.search_error_api_failed, code)
-                                } else {
-                                    msg.takeIf(String::isNotBlank) ?: context.getString(R.string.error_unknown)
-                                }
-                                
-                                SearchUiState.Error(displayError)
-                            },
-                        )
-                    }
-                },
-                enabled = state !is SearchUiState.Loading,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(stringResource(R.string.search_start_button))
+                    },
+                    enabled = state !is SearchUiState.Loading && !isEditingCoordinates,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.search_start_button))
+                }
             }
-        } // closes Row
-        } else if (currentSession != null) {
+        } else {
             SearchSessionSummaryCard(
                 session = currentSession,
-                onEdit = { onConfigExpandedChanged(true) },
+                onEdit = { viewModel.isSearchConfigExpanded = true },
             )
         }
 
@@ -448,7 +399,7 @@ fun SearchScreen(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = { if (canGoPrevious) onPageIndexChanged(pageIndex - 1) }, enabled = canGoPrevious) {
+                Button(onClick = { if (canGoPrevious) viewModel.searchPageIndex = pageIndex - 1 }, enabled = canGoPrevious) {
                     Text(stringResource(R.string.search_previous_page))
                 }
                 val totalPages = (sessionResults.size + pageSize - 1) / pageSize
@@ -456,7 +407,7 @@ fun SearchScreen(
                     text = stringResource(R.string.search_page_index_template, pageIndex + 1, totalPages),
                     style = MaterialTheme.typography.bodySmall,
                 )
-                Button(onClick = { if (canGoNext) onPageIndexChanged(pageIndex + 1) }, enabled = canGoNext) {
+                Button(onClick = { if (canGoNext) viewModel.searchPageIndex = pageIndex + 1 }, enabled = canGoNext) {
                     Text(stringResource(R.string.search_next_page))
                 }
             }
@@ -472,7 +423,7 @@ fun SearchScreen(
                         SearchResultCard(
                             result = result,
                             displayIndex = if (index != -1) index + 1 else null,
-                            onClick = { onResultClick(result) }
+                            onClick = { viewModel.selectedResultForMap = result; onOpenMap() }
                         )
                     }
                 }
@@ -729,7 +680,7 @@ private fun ApiPlaceType.labelResId(): Int = when (this) {
 
 private fun String.toApiPlaceType(): ApiPlaceType = ApiPlaceType.entries.firstOrNull { it.key == this } ?: ApiPlaceType.UNKNOWN
 
-private fun OverpassElement.toPlaceResult(originLat: Double, originLon: Double): PlaceResult {
+fun OverpassElement.toPlaceResult(originLat: Double, originLon: Double): PlaceResult {
     val distance = haversineDistanceMeters(originLat, originLon, latitude, longitude)
     return PlaceResult(
         osmType = type,
@@ -782,14 +733,7 @@ private fun createTintedMarkerDrawable(
     return wrapped
 }
 
-private data class SearchRequestParams(
-    val originLat: Double,
-    val originLon: Double,
-    val radiusMeters: Int,
-    val context: SearchContext,
-    val sortMode: SearchSortMode,
-    val selectedTypes: Set<String>,
-)
+
 
 private fun sanitizeCoordinatesString(query: String): String? {
     val cleanQuery = query.uppercase().trim()
@@ -1067,12 +1011,7 @@ private fun haversineDistanceMeters(
     return (earthRadius * c).toInt()
 }
 
-private sealed interface SearchUiState {
-    data object Idle : SearchUiState
-    data object Loading : SearchUiState
-    data object Success : SearchUiState
-    data class Error(val message: String) : SearchUiState
-}
+
 
 @Composable
 fun MapLocationPickerDialog(

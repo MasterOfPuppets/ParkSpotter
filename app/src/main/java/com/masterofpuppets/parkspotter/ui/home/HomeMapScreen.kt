@@ -7,33 +7,48 @@ import android.location.Location
 import android.location.LocationManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationManagerCompat
 import androidx.core.os.CancellationSignal
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.masterofpuppets.parkspotter.R
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import kotlin.coroutines.resume
@@ -44,10 +59,11 @@ fun HomeMapScreen(
     snackbarHostState: SnackbarHostState,
 ) {
     val context = LocalContext.current
-    var currentLocation by remember { mutableStateOf<Location?>(null) }
+    val scope = rememberCoroutineScope()
+    val homeViewModel: HomeViewModel = viewModel()
     var hasLocationPermission by remember { mutableStateOf(hasLocationPermission(context)) }
-    var isLocating by remember { mutableStateOf(false) }
     var didCenterOnUser by remember { mutableStateOf(false) }
+    var mapViewRef by remember { mutableStateOf<MapView?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
@@ -57,8 +73,22 @@ fun HomeMapScreen(
 
     val permissionMsg = stringResource(R.string.home_location_permission_required)
     val unavailableMsg = stringResource(R.string.home_location_unavailable)
+    val refreshLocationDesc = stringResource(R.string.home_refresh_location)
+    val zoomInDesc = stringResource(R.string.home_zoom_in)
+    val zoomOutDesc = stringResource(R.string.home_zoom_out)
 
-    LaunchedEffect(hasLocationPermission) {
+    fun zoomMapAtCenter(zoomIn: Boolean) {
+        val mapView = mapViewRef ?: return
+        val fixedCenter = GeoPoint(mapView.mapCenter.latitude, mapView.mapCenter.longitude)
+        if (zoomIn) {
+            mapView.controller.zoomIn()
+        } else {
+            mapView.controller.zoomOut()
+        }
+        mapView.controller.setCenter(fixedCenter)
+    }
+
+    fun refreshCurrentLocation() {
         if (!hasLocationPermission) {
             permissionLauncher.launch(
                 arrayOf(
@@ -66,12 +96,45 @@ fun HomeMapScreen(
                     Manifest.permission.ACCESS_COARSE_LOCATION,
                 ),
             )
-            snackbarHostState.showSnackbar(permissionMsg)
-        } else {
-            isLocating = true
-            currentLocation = fetchCurrentLocationWithRetry(context)
-            isLocating = false
-            if (currentLocation == null) {
+            scope.launch { snackbarHostState.showSnackbar(permissionMsg) }
+            return
+        }
+        if (homeViewModel.isLocating) return
+        scope.launch {
+            homeViewModel.updateLocating(true)
+            val location = fetchCurrentLocationWithRetry(context)
+            homeViewModel.updateCurrentLocation(location)
+            homeViewModel.updateLocating(false)
+            homeViewModel.markLocationFetchAttempted()
+            if (location != null) {
+                didCenterOnUser = false
+                val point = GeoPoint(location.latitude, location.longitude)
+                mapViewRef?.controller?.animateTo(point)
+            } else {
+                snackbarHostState.showSnackbar(unavailableMsg)
+            }
+        }
+    }
+
+    LaunchedEffect(hasLocationPermission) {
+        if (!hasLocationPermission) {
+            if (!homeViewModel.hasRequestedLocationPermission) {
+                homeViewModel.markPermissionRequestTriggered()
+                permissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                    ),
+                )
+                snackbarHostState.showSnackbar(permissionMsg)
+            }
+        } else if (!homeViewModel.hasAttemptedLocationFetch && !homeViewModel.isLocating) {
+            homeViewModel.updateLocating(true)
+            val location = fetchCurrentLocationWithRetry(context)
+            homeViewModel.updateCurrentLocation(location)
+            homeViewModel.updateLocating(false)
+            homeViewModel.markLocationFetchAttempted()
+            if (location == null) {
                 snackbarHostState.showSnackbar(unavailableMsg)
             }
         }
@@ -85,14 +148,16 @@ fun HomeMapScreen(
                 MapView(ctx).apply {
                     setTileSource(TileSourceFactory.MAPNIK)
                     setMultiTouchControls(true)
+                    zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
                     controller.setZoom(15.0)
-                    val initialPoint = currentLocation?.let { GeoPoint(it.latitude, it.longitude) }
+                    val initialPoint = homeViewModel.currentLocation?.let { GeoPoint(it.latitude, it.longitude) }
                         ?: GeoPoint(38.696728, -9.364814)
                     controller.setCenter(initialPoint)
                 }
             },
             update = { mapView ->
-                val location = currentLocation
+                mapViewRef = mapView
+                val location = homeViewModel.currentLocation
                 if (location != null) {
                     val point = GeoPoint(location.latitude, location.longitude)
                     if (!didCenterOnUser) {
@@ -123,7 +188,59 @@ fun HomeMapScreen(
             },
         )
 
-        if (isLocating) {
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                shadowElevation = 4.dp,
+            ) {
+                IconButton(onClick = { zoomMapAtCenter(zoomIn = true) }) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = zoomInDesc,
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                shadowElevation = 4.dp,
+            ) {
+                IconButton(onClick = ::refreshCurrentLocation, enabled = !homeViewModel.isLocating) {
+                    Icon(
+                        imageVector = Icons.Default.MyLocation,
+                        contentDescription = refreshLocationDesc,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                shadowElevation = 4.dp,
+            ) {
+                IconButton(onClick = { zoomMapAtCenter(zoomIn = false) }) {
+                    Icon(
+                        imageVector = Icons.Default.Remove,
+                        contentDescription = zoomOutDesc,
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        }
+
+        if (homeViewModel.isLocating) {
             CircularProgressIndicator(
                 modifier = Modifier.align(Alignment.Center)
             )

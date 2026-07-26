@@ -22,7 +22,7 @@ Ao alterar filtros/parametros, a app recalcula imediatamente filtragem + score +
 RF-08 [v0.1] — Ordenar resultados
 A app permite ordenar por score (default), distancia, e outros criterios relevantes definidos depois.
 
-RF-09 [v0.1] — Ver detalhe de local
+RF-09 — Ver detalhe de local
 Ao abrir um resultado, o utilizador ve os fatores que contribuiram para o score (explicabilidade minima).
 
 RF-10 [v0.1] — Configurar perfil da viatura
@@ -81,25 +81,24 @@ A app deve ter uma secao About no menu hamburger com: versao atual da app, link/
 RF-27 — Verificacao de atualizacoes
 Na secao About, a app deve permitir verificar disponibilidade de novas versoes e encaminhar o utilizador para o processo de upgrade quando aplicavel.
 
-RF-28 [v0.1] — Definicao de sessao de pesquisa
+RF-28 — Definicao de sessao de pesquisa
 Cada pesquisa iniciada pelo utilizador cria uma nova sessao de pesquisa. A sessao anterior e considerada encerrada no momento em que uma nova pesquisa e iniciada.
 
 RF-29 — Conteudo e estados do historico de sessao
 O Historico deve guardar por sessao: metadados (data/hora, origem, raio), snapshot de contexto (perfil de viatura e parametros/filtros), resultados apresentados (incluindo score e ordenacao), e acoes do utilizador (detalhe aberto, navegar, copiar). O estado da sessao deve suportar, no minimo: ignorado, visitado e pernoita confirmada.
 
-RF-30 [v0.1] — Mapa de navegacao e operacao documentado
+RF-30  — Mapa de navegacao e operacao documentado
 O produto deve manter um mapa de navegacao e operacao vigente, alinhado com os requisitos atuais, para orientar implementacao e validacao de fluxos.
 
 Mapa de navegacao e operacao (baseline v0.1)
 - Arranque: modal de Aviso Legal (primeiro arranque) -> Home (Mapa).
-- Menu hamburger: Home, Pesquisa, Preferencias, Historico, About.
+- Menu hamburger: Home, Pesquisa, Preferencias, About.
 - Home (Mapa): localizacao atual + icone hamburger para abrir menu.
 - Pesquisa (menu): escolher origem + raio -> recolha de dataset bruto.
-- Resultados: apos pesquisa mostra pesquisa atual; sem pesquisa na sessao atual mostra Historico.
+- Resultados: apos pesquisa mostra pesquisa atual.
 - Item de resultado: abrir Detalhe, Navegar, Copiar morada/coordenadas.
 - Detalhe: fatores de score + acao de navegacao.
 - Preferencias: perfil de viatura + parametros de filtros/scoring + raio default.
-- Historico: sessoes com estados ignorado/visitado/pernoita confirmada.
 - About: versao atual, aviso legal, verificacao de atualizacoes.
 
 Regras operacionais (baseline v0.1)

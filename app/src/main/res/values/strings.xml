@@ -33,6 +33,9 @@
     <string name="home_location_fetching">Getting current location…</string>
     <string name="home_location_unavailable">Unable to get location right now. Check GPS/network and try again.</string>
     <string name="home_location_permission_required">Location permission is required to show your current position.</string>
+    <string name="home_refresh_location">Recalculate current location</string>
+    <string name="home_zoom_in">Zoom in</string>
+    <string name="home_zoom_out">Zoom out</string>
     <string name="placeholder_search_title">Search placeholder</string>
     <string name="placeholder_search_description">This screen will collect origin and radius before fetching raw nearby parking locations.</string>
     <string name="placeholder_results_title">Results placeholder</string>
@@ -111,6 +114,24 @@
     <string name="place_type_camp_site">Camp site</string>
     <string name="place_type_unknown">Unknown type</string>
     <string name="result_name_unknown">Unnamed location</string>
+
+    <string name="vehicle_category_city_car">City Car / Hatchback</string>
+    <string name="vehicle_category_sedan">Sedan / Saloon</string>
+    <string name="vehicle_category_station_wagon">Station Wagon / Estate</string>
+    <string name="vehicle_category_suv">SUV / Crossover</string>
+    <string name="vehicle_category_minivan">MPV / Minivan</string>
+    <string name="vehicle_category_van">Van / Cargo Van</string>
+    <string name="vehicle_category_pickup_truck">Pickup Truck</string>
+    <string name="vehicle_category_campervan">Campervan</string>
+    <string name="vehicle_category_motorhome">Motorhome</string>
+    <string name="vehicle_category_caravan">Caravan / Travel Trailer</string>
+
+    <string name="discretion_level_low">Low</string>
+    <string name="discretion_level_medium">Medium</string>
+    <string name="discretion_level_high">High</string>
+
+    <string name="vehicle_active_delete_warning">Warning: you are about to delete the active vehicle. Please choose or create another one, otherwise the app will use default values.</string>
+
     <string name="coords_copied">Coordinates copied</string>
     <string name="error_unknown">Unknown error</string>
 
