@@ -29,6 +29,14 @@ class SearchServiceImpl : SearchService {
             
             val sanitized = applySanitization(mapped)
             
+            // Log the actual survivors (not sanitized) for debugging
+            val survivors = sanitized.filter { !it.isSanitized }
+            android.util.Log.d("SearchService_Survivors", "=== FINAL SURVIVORS: ${survivors.size} ===")
+            survivors.forEachIndexed { index, el ->
+                val tagsFormatted = el.tags.entries.joinToString(", ") { "${it.key}=${it.value}" }
+                android.util.Log.d("SearchService_Survivors", "SURVIVOR[$index]: ID=${el.osmId} | TYPE=${el.osmType} | NAME=${el.name ?: "Unnamed"} | DISTANCE=${el.distanceMeters}m | TAGS=[$tagsFormatted]")
+            }
+            
             when (sortMode) {
                 SearchSortMode.DISTANCE -> sanitized.sortedBy { it.distanceMeters }
                 SearchSortMode.SCORE -> sanitized.sortedByDescending { it.score ?: 0f }
@@ -66,7 +74,38 @@ class SearchServiceImpl : SearchService {
         // Rule 4: Sanitize streets by isolation and survival
         workingList = sanitizeStreetsByIsolationAndSurvival(workingList)
 
+        // Rule 5: Suppress street or parking by proximity based on information density (35m)
+        workingList = suppressStreetOrParkingByProximity(workingList)
+
         return workingList
+    }
+
+    private fun suppressStreetOrParkingByProximity(results: List<PlaceResult>): List<PlaceResult> {
+        val streetList = results.filter { it.placeType == ApiPlaceType.STREET.key && !it.isSanitized }
+        val parkingList = results.filter { it.placeType == ApiPlaceType.PARKING.key && !it.isSanitized }
+
+        val toSanitizeIds = mutableSetOf<Long>()
+
+        for (street in streetList) {
+            for (parking in parkingList) {
+                val dist = haversineDistanceMeters(street.latitude, street.longitude, parking.latitude, parking.longitude)
+                if (dist <= 35) {
+                    if (street.tags.size >= parking.tags.size) {
+                        toSanitizeIds.add(parking.osmId)
+                    } else {
+                        toSanitizeIds.add(street.osmId)
+                    }
+                }
+            }
+        }
+
+        return results.map { current ->
+            if (toSanitizeIds.contains(current.osmId) && !current.isSanitized) {
+                current.copy(isSanitized = true, sanitizationReason = "Suppressed by nearby richer street/parking within 35m")
+            } else {
+                current
+            }
+        }
     }
 
     private fun sanitizeExactDuplicates(results: List<PlaceResult>): List<PlaceResult> {

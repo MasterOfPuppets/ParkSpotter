@@ -62,12 +62,13 @@ object OverpassClient {
                 val json = response.body?.string() ?: return@withContext Result.failure(Exception("Empty response"))
                 Log.d(TAG, "Response body (first 500 chars): ${json.take(500)}")
                 
-                // New logging for each item in the response
+                // New logging for each item in the response with ALL tags
                 val parsed = gson.fromJson(json, OverpassResponse::class.java)
                 Log.d(TAG, "Parsed elements: ${parsed.elements.size}")
                 parsed.elements.forEachIndexed { index, el ->
                     val name = el.tags["name"] ?: el.tags["ref"] ?: "Unnamed"
-                    Log.d(TAG, "ITEM[$index]: ID=${el.id} | TYPE=${el.type} | NAME=$name | LAT=${el.latitude} | LON=${el.longitude}")
+                    val tagsFormatted = el.tags.entries.joinToString(", ") { "${it.key}=${it.value}" }
+                    Log.d(TAG, "ITEM[$index]: ID=${el.id} | TYPE=${el.type} | NAME=$name | LAT=${el.latitude} | LON=${el.longitude} | TAGS=[$tagsFormatted]")
                 }
 
                 Result.success(parsed.elements)
@@ -82,8 +83,7 @@ object OverpassClient {
         (
           node["amenity"="parking"](around:$radius,$lat,$lon);
           way["amenity"="parking"](around:$radius,$lat,$lon);
-          way["highway"="residential"](around:$radius,$lat,$lon);
-          way["highway"="living_street"](around:$radius,$lat,$lon);
+          way["highway"~"primary|secondary|tertiary|unclassified|residential|living_street|rest_area"](around:$radius,$lat,$lon);
           way["highway"="service"]["service"="parking_aisle"](around:$radius,$lat,$lon);
           node["leisure"="park"](around:$radius,$lat,$lon);
           way["leisure"="park"](around:$radius,$lat,$lon);

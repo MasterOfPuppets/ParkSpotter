@@ -26,14 +26,23 @@ enum class ApiPlaceType(val key: String) {
     UNKNOWN("unknown");
 
     companion object {
-        fun from(tags: Map<String, String>): ApiPlaceType = when {
-            tags["amenity"] == "parking" || 
-            (tags["highway"] == "service" && tags["service"] == "parking_aisle") -> PARKING
-            tags["highway"] == "living_street" || 
-            tags["highway"] == "residential" -> STREET
-            tags["leisure"] == "park" -> PARK
-            tags["tourism"] == "camp_site" -> CAMP_SITE
-            else -> UNKNOWN
+        private val STREET_HIGHWAY_TYPES = setOf(
+            "primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "rest_area"
+        )
+
+        fun from(tags: Map<String, String>): ApiPlaceType {
+            if (tags.containsKey("junction")) {
+                return UNKNOWN
+            }
+
+            return when {
+                tags["amenity"] == "parking" || 
+                (tags["highway"] == "service" && tags["service"] == "parking_aisle") -> PARKING
+                tags["highway"] in STREET_HIGHWAY_TYPES -> STREET
+                tags["leisure"] == "park" -> PARK
+                tags["tourism"] == "camp_site" -> CAMP_SITE
+                else -> UNKNOWN
+            }
         }
     }
 }

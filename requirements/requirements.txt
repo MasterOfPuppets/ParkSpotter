@@ -13,7 +13,7 @@ A app mantem localmente o conjunto de resultados brutos da pesquisa ativa para p
 RF-05 [v0.1] — Aplicar filtros no cliente
 Com base no dataset bruto, o utilizador pode filtrar por criterios (ex.: tipo de local, contexto urbano/natureza, nivel de infraestrutura).
 
-RF-06 [suspended] — Calcular score no cliente
+RF-06 — Calcular score no cliente
 Cada local recebe score de adequacao calculado localmente, usando parametros do utilizador (incluindo perfil da viatura).
 
 RF-07 [v0.1] — Recalcular em tempo real
@@ -112,10 +112,8 @@ A versao 0.1 deve definir as entidades base (modelo de dados e atributos essenci
 RF-32 [v0.1] — Baseline de design da interface
 A versao 0.1 deve fechar o design base da interface (estrutura visual dos ecras, componentes principais, hierarquia de informacao e comportamento dos estados vazios/carregamento/erro) para permitir implementacao consistente nas versoes seguintes.
 
-RF-33 - Traçar o trajeto entre os locais
-Poder navegar pelos locais sugeridos de forma inteligente
-
-
+RF-33 — Trajeto inteligente entre locais sugeridos
+A app permite traçar uma rota lógica e otimizada ligando a origem da pesquisa a todos os resultados "sobreviventes". Para evitar ziguezagues, os pontos devem ser previamente ordenados por um algoritmo de otimização de caminho (como o OSRM Trip API / TSP), de forma contínua a partir da origem. A rota deve ser desenhada no mapa seguindo as curvas reais das estradas (road geometry), e a lista de resultados deve seguir esta mesma ordem lógica antes de ser apresentada e paginada.
 
 
 Paleta de cores (baseada no logo ParkSpotter)
