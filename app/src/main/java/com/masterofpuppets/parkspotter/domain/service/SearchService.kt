@@ -10,6 +10,15 @@ interface SearchService {
         lon: Double,
         radiusMeters: Int,
         selectedTypes: Set<ApiPlaceType>,
-        sortMode: SearchSortMode
-    ): Result<List<PlaceResult>>
+        sortMode: SearchSortMode,
+        contexts: Set<com.masterofpuppets.parkspotter.ui.search.SearchContext> = com.masterofpuppets.parkspotter.ui.search.defaultSearchContexts
+    ): Result<Triple<List<PlaceResult>, List<PlaceResult>, List<com.masterofpuppets.parkspotter.spike.OverpassElement>>>
+
+    fun applyLocalFilter(
+        rawResults: List<PlaceResult>,
+        selectedTypes: Set<ApiPlaceType>,
+        sortMode: SearchSortMode,
+        contexts: Set<com.masterofpuppets.parkspotter.ui.search.SearchContext>,
+        rawOverpassElements: List<com.masterofpuppets.parkspotter.spike.OverpassElement> = emptyList()
+    ): List<PlaceResult>
 }

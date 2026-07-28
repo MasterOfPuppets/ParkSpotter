@@ -83,12 +83,20 @@ object OverpassClient {
         (
           node["amenity"="parking"](around:$radius,$lat,$lon);
           way["amenity"="parking"](around:$radius,$lat,$lon);
-          way["highway"~"primary|secondary|tertiary|unclassified|residential|living_street|rest_area"](around:$radius,$lat,$lon);
+          way["highway"~"primary|secondary|tertiary|unclassified|residential|living_street|rest_area|services"](around:$radius,$lat,$lon);
           way["highway"="service"]["service"="parking_aisle"](around:$radius,$lat,$lon);
+          node["amenity"~"fuel|hospital|bus_station|motorhome_stopover"](around:$radius,$lat,$lon);
+          way["amenity"~"fuel|hospital|bus_station|motorhome_stopover"](around:$radius,$lat,$lon);
+          node["shop"~"supermarket|mall"](around:$radius,$lat,$lon);
+          way["shop"~"supermarket|mall"](around:$radius,$lat,$lon);
+          node["railway"="station"](around:$radius,$lat,$lon);
+          way["railway"="station"](around:$radius,$lat,$lon);
+          node["natural"~"beach|cliff"](around:$radius,$lat,$lon);
+          way["natural"~"beach|cliff"](around:$radius,$lat,$lon);
+          node["tourism"~"camp_site|caravan_site|viewpoint"](around:$radius,$lat,$lon);
+          way["tourism"~"camp_site|caravan_site|viewpoint"](around:$radius,$lat,$lon);
           node["leisure"="park"](around:$radius,$lat,$lon);
           way["leisure"="park"](around:$radius,$lat,$lon);
-          node["tourism"="camp_site"](around:$radius,$lat,$lon);
-          way["tourism"="camp_site"](around:$radius,$lat,$lon);
         );
         out center;
     """.trimIndent()

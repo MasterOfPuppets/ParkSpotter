@@ -24,7 +24,7 @@ data class SearchRequestParams(
     val originLat: Double,
     val originLon: Double,
     val radiusMeters: Int,
-    val context: SearchContext,
+    val contexts: Set<SearchContext>,
     val sortMode: SearchSortMode,
     val selectedTypes: Set<String>,
 )
@@ -64,6 +64,25 @@ class SearchViewModel(
         uiState = SearchUiState.Error(message)
     }
 
+    fun applyLocalFilter(normalizedSettings: SearchUiSettings) {
+        val current = searchSession ?: return
+        val filtered = searchService.applyLocalFilter(
+            rawResults = current.rawResults,
+            selectedTypes = searchFormState.selectedTypes,
+            sortMode = searchFormState.sortMode,
+            contexts = searchFormState.selectedContexts,
+            rawOverpassElements = current.rawOverpassElements
+        )
+        searchSession = current.copy(
+            filteredResults = filtered,
+            selectedContexts = searchFormState.selectedContexts,
+            shouldShowTooManyResultsWarning = filtered.size > normalizedSettings.warnIfResultsAbove,
+        )
+        searchPageIndex = 0
+        isSearchConfigExpanded = false
+        uiState = SearchUiState.Success
+    }
+
     fun executeSearch(
         context: Context,
         radius: Int,
@@ -74,7 +93,7 @@ class SearchViewModel(
             originLat = coords.first,
             originLon = coords.second,
             radiusMeters = radius,
-            context = searchFormState.selectedContext,
+            contexts = searchFormState.selectedContexts,
             sortMode = searchFormState.sortMode,
             selectedTypes = searchFormState.selectedTypes.map { it.key }.toSet(),
         )
@@ -96,18 +115,21 @@ class SearchViewModel(
                 lon = coords.second,
                 radiusMeters = radius,
                 selectedTypes = searchFormState.selectedTypes,
-                sortMode = searchFormState.sortMode
+                sortMode = searchFormState.sortMode,
+                contexts = searchFormState.selectedContexts
             )
 
             uiState = result.fold(
-                onSuccess = { mappedAndSanitized ->
+                onSuccess = { (rawList, filteredList, rawElements) ->
                     searchSession = SearchSessionState(
                         originLat = coords.first,
                         originLon = coords.second,
                         radiusMeters = radius,
-                        context = searchFormState.selectedContext,
-                        allResults = mappedAndSanitized,
-                        shouldShowTooManyResultsWarning = mappedAndSanitized.size > normalizedSettings.warnIfResultsAbove,
+                        rawResults = rawList,
+                        filteredResults = filteredList,
+                        selectedContexts = searchFormState.selectedContexts,
+                        shouldShowTooManyResultsWarning = filteredList.size > normalizedSettings.warnIfResultsAbove,
+                        rawOverpassElements = rawElements,
                     )
                     
                     isSearchConfigExpanded = false

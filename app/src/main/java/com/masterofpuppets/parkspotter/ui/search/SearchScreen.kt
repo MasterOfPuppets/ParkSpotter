@@ -42,10 +42,16 @@ import org.osmdroid.events.ZoomEvent
 import org.osmdroid.views.CustomZoomButtonsController
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHostState
@@ -198,7 +204,7 @@ fun SearchScreen(
     val warningMessage = if (currentSession?.shouldShowTooManyResultsWarning == true) {
         stringResource(
             R.string.search_too_many_results_hint,
-            currentSession.allResults.size,
+            currentSession.filteredResults.size,
             normalizedSettings.warnIfResultsAbove,
         )
     } else null
@@ -245,7 +251,7 @@ fun SearchScreen(
     }
 
     val pageSize = normalizedSettings.resultsPageSize
-    val sessionResults = currentSession?.allResults.orEmpty().filter { !it.isSanitized }
+    val sessionResults = currentSession?.filteredResults.orEmpty()
     val pagedResults = sessionResults
         .drop(pageIndex * pageSize)
         .take(pageSize)
@@ -263,114 +269,191 @@ fun SearchScreen(
 
         if (currentSession == null || isConfigExpanded) {
             val invalidFormatMsg = stringResource(R.string.search_error_invalid_coordinates_format)
-            
-            CoordinatesInputCard(
-                currentQuery = formState.locationQuery,
-                onQueryConfirmed = { formState.locationQuery = it },
-                onInvalidFormat = {
-                    scope.launch { snackbarHostState.showSnackbar(invalidFormatMsg) }
-                },
-                onEditingStateChanged = { isEditing ->
-                    isEditingCoordinates = isEditing
-                }
-            )
+            val hasRawResults = currentSession?.rawResults?.isNotEmpty() == true
 
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
+            // Card 1: Search Parameters (API Data Fetching)
+            Card(
                 modifier = Modifier.fillMaxWidth()
             ) {
-                TextButton(onClick = {
-                    if (!hasLocationPermission) {
-                        locationPermissionLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION,
-                            )
-                        )
-                    } else {
-                        updateCurrentLocation()
-                    }
-                }) {
-                    Icon(Icons.Default.MyLocation, contentDescription = null)
-                    Spacer(Modifier.width(4.dp))
-                    Text(stringResource(R.string.search_btn_current_location))
-                }
-                
-                TextButton(onClick = { showMapPicker = true }) {
-                    Icon(Icons.Default.Map, contentDescription = null)
-                    Spacer(Modifier.width(4.dp))
-                    Text(stringResource(R.string.search_btn_choose_map))
-                }
-            }
+                Column(
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.search_section_location_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
 
-            if (showMapPicker) {
-                val currentCoords = extractCoordinatesPair(formState.locationQuery)
-                MapLocationPickerDialog(
-                    initialLat = currentCoords?.first,
-                    initialLon = currentCoords?.second,
-                    onDismiss = { showMapPicker = false },
-                    onConfirm = { lat, lon ->
-                        val newQuery = String.format(java.util.Locale.US, "%.6f, %.6f", lat, lon)
-                        formState.locationQuery = newQuery
-                        showMapPicker = false
-                    },
-                    onGetCurrentLocation = {
-                        getBestLastKnownLocation(context)?.let {
-                            GeoPoint(it.latitude, it.longitude)
+                    CoordinatesInputCard(
+                        currentQuery = formState.locationQuery,
+                        onQueryConfirmed = { formState.locationQuery = it },
+                        onInvalidFormat = {
+                            scope.launch { snackbarHostState.showSnackbar(invalidFormatMsg) }
+                        },
+                        onEditingStateChanged = { isEditing ->
+                            isEditingCoordinates = isEditing
+                        }
+                    )
+
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        TextButton(onClick = {
+                            if (!hasLocationPermission) {
+                                locationPermissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                                    )
+                                )
+                            } else {
+                                updateCurrentLocation()
+                            }
+                        }) {
+                            Icon(Icons.Default.MyLocation, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text(stringResource(R.string.search_btn_current_location))
+                        }
+
+                        TextButton(onClick = { showMapPicker = true }) {
+                            Icon(Icons.Default.Map, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text(stringResource(R.string.search_btn_choose_map))
                         }
                     }
-                )
+
+                    if (showMapPicker) {
+                        val currentCoords = extractCoordinatesPair(formState.locationQuery)
+                        MapLocationPickerDialog(
+                            initialLat = currentCoords?.first,
+                            initialLon = currentCoords?.second,
+                            onDismiss = { showMapPicker = false },
+                            onConfirm = { lat, lon ->
+                                val newQuery = String.format(java.util.Locale.US, "%.6f, %.6f", lat, lon)
+                                formState.locationQuery = newQuery
+                                showMapPicker = false
+                            },
+                            onGetCurrentLocation = {
+                                getBestLastKnownLocation(context)?.let {
+                                    GeoPoint(it.latitude, it.longitude)
+                                }
+                            }
+                        )
+                    }
+
+                    Text(
+                        text = stringResource(R.string.search_radius_value_template, formState.radiusMeters, minRadius, maxRadius),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Slider(
+                        value = formState.radiusMeters.toFloat(),
+                        onValueChange = { value ->
+                            formState.radiusMeters = value.toInt().coerceIn(minRadius, maxRadius)
+                            showRadiusPreview = true
+                        },
+                        onValueChangeFinished = { showRadiusPreview = false },
+                        valueRange = minRadius.toFloat()..maxRadius.toFloat(),
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TextButton(
+                            onClick = { formState.resetSearchParams(minRadius) },
+                            enabled = state !is SearchUiState.Loading,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(stringResource(R.string.search_reset_search_button))
+                        }
+
+                        Button(
+                            onClick = {
+                                val coords = extractCoordinatesPair(formState.locationQuery)
+                                if (coords == null) {
+                                    viewModel.setError(context.getString(R.string.search_error_invalid_coordinates_format))
+                                    return@Button
+                                }
+
+                                viewModel.executeSearch(
+                                    context = context,
+                                    radius = formState.radiusMeters,
+                                    coords = coords,
+                                    normalizedSettings = normalizedSettings
+                                )
+                            },
+                            enabled = state !is SearchUiState.Loading && !isEditingCoordinates,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            if (state is SearchUiState.Loading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.height(20.dp).width(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            } else {
+                                Text(stringResource(R.string.search_start_button))
+                            }
+                        }
+                    }
+                }
             }
 
-            Text(
-                text = stringResource(R.string.search_radius_value_template, formState.radiusMeters, minRadius, maxRadius),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Slider(
-                value = formState.radiusMeters.toFloat(),
-                onValueChange = { value ->
-                    formState.radiusMeters = value.toInt().coerceIn(minRadius, maxRadius)
-                    showRadiusPreview = true
-                },
-                onValueChangeFinished = { showRadiusPreview = false },
-                valueRange = minRadius.toFloat()..maxRadius.toFloat(),
-            )
-
-            SearchContextSelector(selected = formState.selectedContext, onSelected = { formState.selectedContext = it })
-            SearchTypeSelector(selectedTypes = formState.selectedTypes, onSelectedTypes = { formState.selectedTypes = it })
-            SearchSortSelector(selected = formState.sortMode, onSelected = { formState.sortMode = it })
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // Card 2: Result Filters & Sorting
+            Card(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                androidx.compose.material3.TextButton(
-                    onClick = { formState.reset(minRadius) },
-                    enabled = state !is SearchUiState.Loading,
-                    modifier = Modifier.weight(1f)
+                Column(
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(stringResource(R.string.search_reset_button))
-                }
+                    Text(
+                        text = stringResource(R.string.search_section_filter_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
 
-                Button(
-                    onClick = {
-                        val coords = extractCoordinatesPair(formState.locationQuery)
-                        if (coords == null) {
-                            viewModel.setError(context.getString(R.string.search_error_invalid_coordinates_format))
-                            return@Button
+                    SearchContextSelector(
+                        selectedContexts = formState.selectedContexts,
+                        onToggleContext = { formState.toggleContext(it) }
+                    )
+                    SearchTypeSelector(
+                        selectedTypes = formState.selectedTypes,
+                        onSelectedTypes = { formState.selectedTypes = it }
+                    )
+                    SearchSortSelector(
+                        selected = formState.sortMode,
+                        onSelected = { formState.sortMode = it }
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TextButton(
+                            onClick = { formState.resetFilterParams() },
+                            enabled = state !is SearchUiState.Loading && hasRawResults,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(stringResource(R.string.search_reset_filters_button))
                         }
-                        
-                        viewModel.executeSearch(
-                            context = context,
-                            radius = formState.radiusMeters,
-                            coords = coords,
-                            normalizedSettings = normalizedSettings
-                        )
-                    },
-                    enabled = state !is SearchUiState.Loading && !isEditingCoordinates,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(stringResource(R.string.search_start_button))
+
+                        Button(
+                            onClick = {
+                                viewModel.applyLocalFilter(normalizedSettings)
+                            },
+                            enabled = state !is SearchUiState.Loading && hasRawResults,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(stringResource(R.string.search_apply_filter_button))
+                        }
+                    }
                 }
             }
         } else {
@@ -380,12 +463,15 @@ fun SearchScreen(
             )
         }
 
-        when (state) {
-            is SearchUiState.Loading -> Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        if (state is SearchUiState.Loading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
                 CircularProgressIndicator()
             }
-            // Error is now handled by the Snackbar LaunchEffect above
-            else -> Unit
         }
 
         if (currentSession != null && !isConfigExpanded) {
@@ -447,22 +533,56 @@ fun SearchScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SearchContextSelector(
-    selected: SearchContext,
-    onSelected: (SearchContext) -> Unit,
+    selectedContexts: Set<SearchContext>,
+    onToggleContext: (SearchContext) -> Unit,
 ) {
-    Text(text = stringResource(R.string.search_context_label), style = MaterialTheme.typography.labelLarge)
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.horizontalScroll(rememberScrollState()),
+    var expanded by remember { mutableStateOf(false) }
+
+    val displayText = when {
+        selectedContexts.isEmpty() || selectedContexts.size == SearchContext.entries.size -> "All"
+        selectedContexts.size == 1 -> stringResource(selectedContexts.first().labelResId())
+        else -> "${selectedContexts.size} selected"
+    }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth()
     ) {
-        SearchContext.entries.forEach { context ->
-            FilterChip(
-                selected = selected == context,
-                onClick = { onSelected(context) },
-                label = { Text(stringResource(context.labelResId())) },
-            )
+        OutlinedTextField(
+            value = displayText,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(stringResource(R.string.search_context_label)) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
+                .fillMaxWidth()
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            SearchContext.entries.forEach { context ->
+                val isSelected = selectedContexts.contains(context)
+                DropdownMenuItem(
+                    text = { Text(stringResource(context.labelResId())) },
+                    leadingIcon = {
+                        Checkbox(
+                            checked = isSelected,
+                            onCheckedChange = null
+                        )
+                    },
+                    onClick = {
+                        onToggleContext(context)
+                    }
+                )
+            }
         }
     }
 }
@@ -526,13 +646,18 @@ private fun SearchSessionSummaryCard(
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val contextSummary = if (session.selectedContexts.isEmpty() || session.selectedContexts.size == SearchContext.entries.size) {
+                "All"
+            } else {
+                session.selectedContexts.map { stringResource(it.labelResId()) }.joinToString(", ")
+            }
             Text(
                 text = stringResource(
                     R.string.search_session_summary_template,
                     session.originLat,
                     session.originLon,
                     session.radiusMeters,
-                    stringResource(session.context.labelResId()),
+                    contextSummary,
                 ),
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -659,9 +784,10 @@ private fun RadiusPreviewDialog(
 }
 
 private fun SearchContext.labelResId(): Int = when (this) {
-    SearchContext.URBAN -> R.string.search_context_urban
-    SearchContext.SUBURBAN -> R.string.search_context_suburban
-    SearchContext.MIXED -> R.string.search_context_mixed
+    SearchContext.RESIDENTIAL -> R.string.search_context_residential
+    SearchContext.COMMERCIAL_WORK -> R.string.search_context_commercial_work
+    SearchContext.SERVICES_TRANSPORT_HEALTH -> R.string.search_context_services_transport_health
+    SearchContext.NATURE_DEDICATED -> R.string.search_context_nature_dedicated
 }
 
 private fun SearchSortMode.labelResId(): Int = when (this) {

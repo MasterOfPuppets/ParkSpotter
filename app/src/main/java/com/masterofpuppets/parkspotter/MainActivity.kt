@@ -262,7 +262,7 @@ private fun ParkSpotterApp(
                     AppScreen.Search -> if (showSearchMap && currentSearchSession != null) {
                         val pageSize = searchSettings.resultsPageSize
                         val singleResult = searchViewModel.selectedResultForMap
-                        val allResults = currentSearchSession.allResults.filter { !it.isSanitized }
+                        val allResults = currentSearchSession.filteredResults
                         
                         val (mapResults, currentPageDisplay, totalPagesDisplay) = if (singleResult != null) {
                             val globalIndex = allResults.indexOf(singleResult)

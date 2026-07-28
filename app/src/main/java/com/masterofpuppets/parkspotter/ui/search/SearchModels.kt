@@ -28,15 +28,18 @@ data class SearchSessionState(
     val originLat: Double,
     val originLon: Double,
     val radiusMeters: Int,
-    val context: SearchContext,
-    val allResults: List<PlaceResult>,
+    val rawResults: List<PlaceResult>,
+    val filteredResults: List<PlaceResult>,
+    val selectedContexts: Set<SearchContext>,
     val shouldShowTooManyResultsWarning: Boolean,
+    val rawOverpassElements: List<com.masterofpuppets.parkspotter.spike.OverpassElement> = emptyList(),
 )
 
 enum class SearchContext {
-    URBAN,
-    SUBURBAN,
-    MIXED,
+    RESIDENTIAL,
+    COMMERCIAL_WORK,
+    SERVICES_TRANSPORT_HEALTH,
+    NATURE_DEDICATED,
 }
 
 enum class SearchSortMode {
@@ -54,17 +57,46 @@ val defaultSearchTypes: Set<ApiPlaceType> = setOf(
     ApiPlaceType.STREET,
 )
 
+val defaultSearchContexts: Set<SearchContext> = SearchContext.entries.toSet()
+
 class SearchFormState(initialRadius: Int) {
     var locationQuery by mutableStateOf("")
     var radiusMeters by mutableIntStateOf(initialRadius)
-    var selectedContext by mutableStateOf(SearchContext.URBAN)
+    var selectedContexts by mutableStateOf(defaultSearchContexts)
     var sortMode by mutableStateOf(SearchSortMode.DISTANCE)
     var selectedTypes by mutableStateOf(defaultSearchTypes)
 
-    fun reset(initialRadius: Int) {
+    fun toggleContext(context: SearchContext) {
+        selectedContexts = if (selectedContexts.contains(context)) {
+            selectedContexts - context
+        } else {
+            selectedContexts + context
+        }
+    }
+
+    fun toggleType(type: ApiPlaceType) {
+        if (selectedTypes.contains(type)) {
+            if (selectedTypes.size > 1) {
+                selectedTypes = selectedTypes - type
+            }
+        } else {
+            selectedTypes = selectedTypes + type
+        }
+    }
+
+    fun resetSearchParams(initialRadius: Int) {
+        locationQuery = ""
         radiusMeters = initialRadius
-        selectedContext = SearchContext.URBAN
+    }
+
+    fun resetFilterParams() {
+        selectedContexts = defaultSearchContexts
         sortMode = SearchSortMode.DISTANCE
         selectedTypes = defaultSearchTypes
+    }
+
+    fun reset(initialRadius: Int) {
+        resetSearchParams(initialRadius)
+        resetFilterParams()
     }
 }
