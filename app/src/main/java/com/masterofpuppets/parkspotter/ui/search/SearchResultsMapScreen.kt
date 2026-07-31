@@ -92,7 +92,7 @@ fun SearchResultsMapScreen(
                         id = "${result.osmType}/${result.osmId}"
                         position = resultPoint
                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                        title = "$displayIndex. ${result.name ?: mapView.context.getString(R.string.result_name_unknown)}"
+                        title = "$displayIndex. ${result.name ?: mapView.context.getString(R.string.result_name_unknown)} [OSM: ${result.osmId}]"
                         icon = createMarkerWithBorder(
                             context = mapView.context,
                             fillColor = ContextCompat.getColor(mapView.context, R.color.secondary_dark),

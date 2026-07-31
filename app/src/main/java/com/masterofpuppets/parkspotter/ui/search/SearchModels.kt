@@ -37,9 +37,9 @@ data class SearchSessionState(
 
 enum class SearchContext {
     RESIDENTIAL,
-    COMMERCIAL_WORK,
-    SERVICES_TRANSPORT_HEALTH,
+    COMMERCIAL_INDUSTRIAL_SERVICES,
     NATURE_DEDICATED,
+    OTHER,
 }
 
 enum class SearchSortMode {

@@ -139,9 +139,9 @@ private fun CoordinatesInputCard(
                         }
                         IconButton(onClick = {
                             val finalQuery = if (draftQuery.isBlank()) currentQuery else draftQuery
-                            val sanitized = sanitizeCoordinatesString(finalQuery)
-                            if (sanitized != null) {
-                                onQueryConfirmed(sanitized)
+                            val parsed = parseCoordinates(finalQuery)
+                            if (parsed != null) {
+                                onQueryConfirmed(formatCoordinates(parsed.first, parsed.second))
                                 isEditing = false
                             } else {
                                 onInvalidFormat()
@@ -226,7 +226,7 @@ fun SearchScreen(
     val updateCurrentLocation = {
         if (hasLocationPermission) {
             getBestLastKnownLocation(context)?.let {
-                formState.locationQuery = String.format(java.util.Locale.US, "%.6f, %.6f", it.latitude, it.longitude)
+                formState.locationQuery = formatCoordinates(it.latitude, it.longitude)
             } ?: run {
                 viewModel.setError(context.getString(R.string.search_error_location_unavailable))
             }
@@ -327,14 +327,13 @@ fun SearchScreen(
                     }
 
                     if (showMapPicker) {
-                        val currentCoords = extractCoordinatesPair(formState.locationQuery)
+                        val currentCoords = parseCoordinates(formState.locationQuery)
                         MapLocationPickerDialog(
                             initialLat = currentCoords?.first,
                             initialLon = currentCoords?.second,
                             onDismiss = { showMapPicker = false },
                             onConfirm = { lat, lon ->
-                                val newQuery = String.format(java.util.Locale.US, "%.6f, %.6f", lat, lon)
-                                formState.locationQuery = newQuery
+                                formState.locationQuery = formatCoordinates(lat, lon)
                                 showMapPicker = false
                             },
                             onGetCurrentLocation = {
@@ -693,7 +692,7 @@ private fun SearchResultCard(
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = result.name ?: stringResource(R.string.result_name_unknown),
+                    text = "${result.name ?: stringResource(R.string.result_name_unknown)} [OSM ID: ${result.osmId}]",
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
@@ -712,6 +711,18 @@ private fun SearchResultCard(
                 Text(
                     text = stringResource(R.string.search_result_distance_template, result.distanceMeters),
                     style = MaterialTheme.typography.bodySmall,
+                )
+                
+                val flagsSummary = if (result.contextMatches.isEmpty()) {
+                    "None"
+                } else {
+                    result.contextMatches.map { stringResource(it.labelResId()) }.joinToString(", ")
+                }
+                Text(
+                    text = "Context Flags: $flagsSummary",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
         }
@@ -785,9 +796,9 @@ private fun RadiusPreviewDialog(
 
 private fun SearchContext.labelResId(): Int = when (this) {
     SearchContext.RESIDENTIAL -> R.string.search_context_residential
-    SearchContext.COMMERCIAL_WORK -> R.string.search_context_commercial_work
-    SearchContext.SERVICES_TRANSPORT_HEALTH -> R.string.search_context_services_transport_health
+    SearchContext.COMMERCIAL_INDUSTRIAL_SERVICES -> R.string.search_context_commercial_industrial_services
     SearchContext.NATURE_DEDICATED -> R.string.search_context_nature_dedicated
+    SearchContext.OTHER -> R.string.search_context_other
 }
 
 private fun SearchSortMode.labelResId(): Int = when (this) {
@@ -847,8 +858,6 @@ private fun createTintedMarkerDrawable(
 
 private fun sanitizeCoordinatesString(query: String): String? {
     val cleanQuery = query.uppercase().trim()
-    val defaultFormat = java.text.NumberFormat.getInstance(java.util.Locale.getDefault())
-    val usFormat = java.text.NumberFormat.getInstance(java.util.Locale.US)
 
     // Helper to evaluate and validate boundaries
     fun evaluate(lat: Double?, lon: Double?): String? {
@@ -859,12 +868,8 @@ private fun sanitizeCoordinatesString(query: String): String? {
     }
 
     fun parseNumberTolerant(str: String): Double? {
-        val s = str.trim()
+        val s = str.trim().replace(',', '.')
         if (s.isEmpty()) return null
-        val localParsed = runCatching { defaultFormat.parse(s)?.toDouble() }.getOrNull()
-        if (localParsed != null) return localParsed
-        val usParsed = runCatching { usFormat.parse(s)?.toDouble() }.getOrNull()
-        if (usParsed != null) return usParsed
         return s.toDoubleOrNull()
     }
 
@@ -928,17 +933,24 @@ private fun sanitizeCoordinatesString(query: String): String? {
     return null
 }
 
-private fun extractCoordinatesPair(query: String): Pair<Double, Double>? {
-    val parts = query.split(",").map { it.trim() }
+private fun formatCoordinates(lat: Double, lon: Double): String {
+    return String.format(java.util.Locale.US, "%.6f, %.6f", lat, lon)
+}
+
+private fun parseCoordinates(query: String): Pair<Double, Double>? {
+    val sanitized = sanitizeCoordinatesString(query) ?: return null
+    val parts = sanitized.split(",").map { it.trim() }
     if (parts.size == 2) {
         val lat = parts[0].toDoubleOrNull()
         val lon = parts[1].toDoubleOrNull()
-        if (lat != null && lon != null) {
+        if (lat != null && lon != null && lat in -90.0..90.0 && lon in -180.0..180.0) {
             return lat to lon
         }
     }
     return null
 }
+
+private fun extractCoordinatesPair(query: String): Pair<Double, Double>? = parseCoordinates(query)
 
 private fun hasLocationPermission(context: Context): Boolean {
     val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -1011,7 +1023,8 @@ fun MapLocationPickerDialog(
                                 
                                 addMapListener(object : MapListener {
                                     override fun onScroll(event: ScrollEvent?): Boolean {
-                                        val newCenter = GeoPoint(this@apply.mapCenter.latitude, this@apply.mapCenter.longitude)
+                                        val center = this@apply.mapCenter
+                                        val newCenter = GeoPoint(center.latitude, center.longitude)
                                         mapCenter = newCenter
                                         return true
                                     }
@@ -1047,7 +1060,10 @@ fun MapLocationPickerDialog(
                         Text(stringResource(R.string.search_map_picker_cancel))
                     }
                     Button(
-                        onClick = { onConfirm(mapCenter.latitude, mapCenter.longitude) },
+                        onClick = {
+                            val center = mapCenter
+                            onConfirm(center.latitude, center.longitude)
+                        },
                         modifier = Modifier.padding(start = 8.dp)
                     ) {
                         Text(stringResource(R.string.search_map_picker_ok))

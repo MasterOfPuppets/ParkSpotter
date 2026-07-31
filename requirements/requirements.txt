@@ -115,6 +115,8 @@ A versao 0.1 deve fechar o design base da interface (estrutura visual dos ecras,
 RF-33 — Trajeto inteligente entre locais sugeridos
 A app permite traçar uma rota lógica e otimizada ligando a origem da pesquisa a todos os resultados "sobreviventes". Para evitar ziguezagues, os pontos devem ser previamente ordenados por um algoritmo de otimização de caminho (como o OSRM Trip API / TSP), de forma contínua a partir da origem. A rota deve ser desenhada no mapa seguindo as curvas reais das estradas (road geometry), e a lista de resultados deve seguir esta mesma ordem lógica antes de ser apresentada e paginada.
 
+RF-34 - Na página about desenhar uma forma de Help
+
 
 Paleta de cores (baseada no logo ParkSpotter)
   Primaria     : #3A4A5C (azul-slate escuro) — CTAs, highlights, drawer

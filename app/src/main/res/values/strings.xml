@@ -67,9 +67,9 @@
     <string name="search_radius_label">Radius (meters)</string>
     <string name="search_context_label">Zone context</string>
     <string name="search_context_residential">Residential</string>
-    <string name="search_context_commercial_work">Commercial, Industrial &amp; Work</string>
-    <string name="search_context_services_transport_health">Services, Transport &amp; Health</string>
+    <string name="search_context_commercial_industrial_services">Commercial, Industrial &amp; Services</string>
     <string name="search_context_nature_dedicated">Nature &amp; Dedicated</string>
+    <string name="search_context_other">Other / Unassigned</string>
     <string name="search_types_label">Base types</string>
     <string name="search_sort_label">Initial sort</string>
     <string name="search_sort_distance">Distance</string>
