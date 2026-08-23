@@ -1,0 +1,1 @@
+- Nos settings, a seleção do veículo corrente tem o visto no errado. A cor dá destaque mas o visto engana.
