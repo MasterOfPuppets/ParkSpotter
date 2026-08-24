@@ -1,0 +1,44 @@
+ParkSpotter - Versao 0.2 (Beta Baseline)
+
+================================================================================
+REQUISITOS FUNCIONAIS IMPLEMENTADOS E VALIDADOS NA VERSÃO 0.2
+================================================================================
+
+RF-13 [v0.2] — Navegação externa e multi-paragem para o local selecionado
+Cada resultado de pesquisa permite iniciar navegação externa para o destino escolhido através de ações dedicadas e compactas na interface (tanto na lista como no card flutuante do mapa):
+1. Navegação Direta ("Direct"): Inicia navegação imediata e direta para o local selecionado.
+2. Navegação em Rota Dinâmica ("Trip"): Disponível a partir do segundo resultado da lista (#2..#N), traça uma rota externa multi-paragem que parte da localização GPS em tempo real do utilizador, passa sequencialmente pelos locais intermédios anteriores e termina no local selecionado (#N).
+3. Deteção 100% Dinâmica da Aplicação de Navegação Preferida: O utilizador pode escolher nas Definições (Settings), através de um menu dropdown compacto, qual a sua aplicação de navegação preferida. A lista é descoberta dinamicamente através do `PackageManager` do Android (incluindo Google Maps, Kurviger, Waze, OsmAnd, etc.) e inclui a opção "System default / Ask".
+4. Fallback Seguro em Cadeia: Caso a aplicação selecionada não responda ou seja desinstalada, a app comuta automaticamente para o seletor padrão do sistema ou copia as coordenadas para a área de transferência com notificação visual (Snackbar).
+5. Ação de Cópia Manual ("Copy"): Botão dedicado para copiar as coordenadas do local.
+
+RF-30 [v0.2] — Mapa de navegação e operação documentado
+O produto mantém um mapa de navegação e operação vigente e atualizado, alinhado com o scope da versão 0.2.
+
+RF-33 [v0.2] — Trajeto inteligente e ordenação contínua ("Best Route" OSRM / TSP)
+1. Ordenação Padrão por "Best Route": Os resultados sobreviventes são encadeados por um algoritmo de caminho ótimo contínuo (OSRM Trip API / TSP Nearest-Neighbor a partir da origem), eliminando ziguezagues e meias-voltas tanto na lista como na numeração dos pins no mapa (#1, #2, #3...).
+2. Interação nos Marcadores do Mapa: Ao tocar em qualquer marcador (Pin) no mapa, abre-se um card flutuante inferior com o número do ponto, nome, OSM ID, distância e as ações de navegação ("Direct", "Trip" e "Copy").
+3. Seletor de Ordenação Compacto: Seletor de ordenação em dropdown de 1 linha (Material 3) com opções: Best route (Continuous), Distance e Score.
+
+================================================================================
+MAPA DE NAVEGAÇÃO E OPERAÇÃO (v0.2)
+================================================================================
+- Arranque: Modal de Aviso Legal (primeiro arranque ou >24h) -> Home (Mapa).
+- Menu Drawer: Home, Pesquisa, Preferências (Settings), About.
+- Home (Mapa): Localização atual + Menu Hamburger + Controlo de Zoom.
+- Pesquisa:
+  - Card 1: Escolha de Origem (GPS/Mapa/Manual com validação unificada) + Raio -> Recolha de dados brutos ("Start search").
+  - Card 2: Filtros de 4 Zonas de Contexto + Tipos Base + Ordenação (Dropdown compacto "Best Route") -> Filtragem offline ("Apply filter").
+  - Lista de Resultados: Paginação, visualização de OSM ID, distância e Context Flags. Ações por item: "Direct", "Trip" (se >#1 com GPS em tempo real), "Copy".
+  - Mapa de Resultados: Barra superior limpa de paginação + Marcadores numerados e Card flutuante inferior ao tocar em qualquer Pin com ações "Direct", "Trip" e "Copy".
+- Preferências (Settings):
+  - Gestão de Viaturas (CRUD em Room SQLite + escolha de viatura ativa).
+  - Configuração da Aplicação de Navegação Preferida (Dropdown dinâmico com apps reais instaladas no telemóvel + System Default).
+  - Parâmetros de pesquisa (raio padrão, limites min/max, tamanho da página de resultados, limiar de aviso).
+- About: Versão 0.2, Aviso Legal e Informação da Aplicação.
+
+Regras operacionais (v0.2):
+- 1 pesquisa = 1 sessão; nova pesquisa encerra a sessão anterior.
+- Recolha remota retorna dados brutos; filtros e ordenação calculados no cliente offline.
+- Roteamento inicial usa OSRM Trip API com fallback offline Nearest-Neighbor.
+- Navegação externa dispara Intent específico para o pacote da app configurada, com fallback gracioso em cadeia para Intent genérico ou cópia de destino.

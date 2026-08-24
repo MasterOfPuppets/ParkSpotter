@@ -23,7 +23,7 @@ class SearchServiceImpl : SearchService {
         selectedTypes: Set<ApiPlaceType>,
         sortMode: SearchSortMode,
         contexts: Set<com.masterofpuppets.parkspotter.ui.search.SearchContext>
-    ): Result<Triple<List<PlaceResult>, List<PlaceResult>, List<OverpassElement>>> {
+    ): Result<SearchExecutionResult> {
         
         val result = OverpassClient.queryParkingAreas(lat, lon, radiusMeters)
         
@@ -42,7 +42,31 @@ class SearchServiceImpl : SearchService {
 
             val filtered = applyLocalFilterInternal(enrichedRawList, selectedTypes, sortMode, contexts)
             
-            Triple(enrichedRawList, filtered, elements)
+            // If sort mode is BEST_ROUTE, calculate optimal OSRM Trip & Road Geometry
+            var finalFiltered = filtered
+            var roadGeometry: List<Pair<Double, Double>> = emptyList()
+
+            if (sortMode == SearchSortMode.BEST_ROUTE && filtered.isNotEmpty()) {
+                val spotsCoords = filtered.map { it.latitude to it.longitude }
+                val osrmResult = com.masterofpuppets.parkspotter.domain.service.routing.OsrmRoutingClient
+                    .computeOptimalTrip(lat, lon, spotsCoords)
+                    .getOrNull()
+
+                if (osrmResult != null && osrmResult.geometryCoordinates.isNotEmpty()) {
+                    roadGeometry = osrmResult.geometryCoordinates
+                    // If OSRM returned a reordered sequence of waypoints, sort the filtered list accordingly
+                    if (osrmResult.orderedWaypoints.size == filtered.size) {
+                        finalFiltered = osrmResult.orderedWaypoints.mapNotNull { idx -> filtered.getOrNull(idx) }
+                    }
+                }
+            }
+
+            SearchExecutionResult(
+                rawResults = enrichedRawList,
+                filteredResults = finalFiltered,
+                rawElements = elements,
+                routeGeometry = roadGeometry
+            )
         }
     }
 
@@ -122,6 +146,7 @@ class SearchServiceImpl : SearchService {
         }
 
         val finalSortedSurvivors = when (sortMode) {
+            SearchSortMode.BEST_ROUTE -> sortResultsByBestRoute(finalSurvivorsList)
             SearchSortMode.DISTANCE -> finalSurvivorsList.sortedBy { it.distanceMeters }
             SearchSortMode.SCORE -> finalSurvivorsList.sortedByDescending { it.score ?: 0f }
         }
@@ -488,6 +513,33 @@ class SearchServiceImpl : SearchService {
         }
 
         return resolved
+    }
+
+    private fun sortResultsByBestRoute(list: List<PlaceResult>): List<PlaceResult> {
+        if (list.size <= 1) return list
+
+        val unvisited = list.toMutableList()
+        val orderedRoute = mutableListOf<PlaceResult>()
+
+        // 1. First spot is the closest to the origin (minimal distanceMeters)
+        val firstSpot = unvisited.minByOrNull { it.distanceMeters } ?: unvisited.removeAt(0)
+        unvisited.remove(firstSpot)
+        orderedRoute.add(firstSpot)
+
+        var currentSpot = firstSpot
+
+        // 2. Chain subsequent spots by nearest-neighbor distance to build a continuous logical route
+        while (unvisited.isNotEmpty()) {
+            val nextNearest = unvisited.minByOrNull { spot ->
+                haversineDistanceMeters(currentSpot.latitude, currentSpot.longitude, spot.latitude, spot.longitude)
+            } ?: unvisited.removeAt(0)
+
+            unvisited.remove(nextNearest)
+            orderedRoute.add(nextNearest)
+            currentSpot = nextNearest
+        }
+
+        return orderedRoute
     }
 
     private fun hasNearbyTag(

@@ -12,6 +12,7 @@ import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -50,13 +51,23 @@ fun SearchResultsMapScreen(
     originLat: Double,
     originLon: Double,
     resultsWithIndex: List<Pair<Int, PlaceResult>>,
+    allResults: List<PlaceResult> = emptyList(),
+    routeGeometry: List<Pair<Double, Double>> = emptyList(),
     currentPage: Int,
     totalPages: Int,
     isSingleResultMode: Boolean = false,
+    navSettings: SearchUiSettings? = null,
+    onSelectResult: (PlaceResult) -> Unit = {},
     onNextPage: () -> Unit,
     onPreviousPage: () -> Unit,
     onBack: () -> Unit,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val navService = androidx.compose.runtime.remember { com.masterofpuppets.parkspotter.domain.service.navigation.NavigationServiceImpl() }
+    val activeItemPair = if (isSingleResultMode && resultsWithIndex.isNotEmpty()) resultsWithIndex.first() else null
+    val activeResult = activeItemPair?.second
+    val activeDisplayIndex = activeItemPair?.first
+
     Box(modifier = modifier.fillMaxSize()) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -98,6 +109,10 @@ fun SearchResultsMapScreen(
                             fillColor = ContextCompat.getColor(mapView.context, R.color.secondary_dark),
                             text = displayIndex.toString()
                         )
+                        setOnMarkerClickListener { _, _ ->
+                            onSelectResult(result)
+                            true
+                        }
                     }
                     mapView.overlays.add(marker)
                 }
@@ -113,11 +128,13 @@ fun SearchResultsMapScreen(
             },
         )
 
+        // Top Pagination and Back bar
         Surface(
             modifier = Modifier
+                .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .padding(16.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
             shape = MaterialTheme.shapes.medium,
             tonalElevation = 4.dp
         ) {
@@ -152,6 +169,119 @@ fun SearchResultsMapScreen(
                     )
                     IconButton(onClick = onNextPage, enabled = currentPage < totalPages) {
                         Icon(imageVector = Icons.Default.ChevronRight, contentDescription = null)
+                    }
+                }
+            }
+        }
+
+        // Floating Action Card for the selected Pin (Bottom of Screen)
+        if (activeResult != null) {
+            val globalIdx = allResults.indexOf(activeResult)
+            val displayNum = if (activeDisplayIndex != null) activeDisplayIndex else (if (globalIdx != -1) globalIdx + 1 else 1)
+            val previousStops = if (globalIdx > 0) {
+                allResults.take(globalIdx).map { it.latitude to it.longitude }
+            } else emptyList()
+
+            androidx.compose.material3.Card(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                colors = androidx.compose.material3.CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 6.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "#$displayNum. ${activeResult.name ?: stringResource(R.string.result_name_unknown)}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = { onSelectResult(activeResult) }) {
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = "Close"
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "OSM ID: ${activeResult.osmId} • ${activeResult.placeType} • ${stringResource(R.string.search_result_distance_template, activeResult.distanceMeters)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    androidx.compose.material3.HorizontalDivider()
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.Button(
+                            onClick = {
+                                navService.navigateDirect(
+                                    context = context,
+                                    destLat = activeResult.latitude,
+                                    destLon = activeResult.longitude,
+                                    destName = activeResult.name,
+                                    targetPackageName = navSettings?.preferredNavAppPackage
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(stringResource(R.string.action_navigate_direct))
+                        }
+
+                        if (displayNum > 1 && previousStops.isNotEmpty()) {
+                            androidx.compose.material3.OutlinedButton(
+                                onClick = {
+                                    val locationManager = context.getSystemService(android.content.Context.LOCATION_SERVICE) as? android.location.LocationManager
+                                    val fineGranted = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                    val coarseGranted = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                    val liveLoc = if (fineGranted || coarseGranted) {
+                                        locationManager?.getProviders(true)?.mapNotNull { runCatching { locationManager.getLastKnownLocation(it) }.getOrNull() }?.maxByOrNull { it.time }
+                                    } else null
+
+                                    val liveOrigLat = liveLoc?.latitude ?: originLat
+                                    val liveOrigLon = liveLoc?.longitude ?: originLon
+
+                                    navService.navigateTrip(
+                                        context = context,
+                                        originLat = liveOrigLat,
+                                        originLon = liveOrigLon,
+                                        stops = previousStops,
+                                        destLat = activeResult.latitude,
+                                        destLon = activeResult.longitude,
+                                        destName = activeResult.name,
+                                        targetPackageName = navSettings?.preferredNavAppPackage
+                                    )
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(stringResource(R.string.action_navigate_trip))
+                            }
+                        }
+
+                        androidx.compose.material3.TextButton(
+                            onClick = {
+                                navService.copyCoordinatesToClipboard(context, activeResult.latitude, activeResult.longitude)
+                            }
+                        ) {
+                            Text(stringResource(R.string.action_copy_coords))
+                        }
                     }
                 }
             }

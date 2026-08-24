@@ -81,11 +81,18 @@ enum class DiscretionLevel {
     LOW, MEDIUM, HIGH
 }
 
+data class InstalledNavApp(
+    val packageName: String,
+    val appName: String,
+    val isSystemDefault: Boolean = false
+)
+
 data class UserPreferences(
     val defaultRadiusMeters: Int = 2000,
     val legalNoticeLastShownAt: Long = 0L,
     val resultsPageSize: Int = 10,
     val warnIfResultsAbove: Int = 150,
+    val preferredNavigationAppPackage: String = "system_default",
 )
 
 data class HistoryEntry(

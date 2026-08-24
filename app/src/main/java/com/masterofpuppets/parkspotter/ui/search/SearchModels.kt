@@ -13,12 +13,14 @@ data class SearchUiSettings(
     val warnIfResultsAbove: Int = 150,
     val minRadiusMeters: Int = 200,
     val maxRadiusMeters: Int = 800,
+    val preferredNavAppPackage: String = "system_default",
 ) {
     fun normalized(): SearchUiSettings = copy(
         resultsPageSize = resultsPageSize.coerceIn(1, 100),
         warnIfResultsAbove = warnIfResultsAbove.coerceAtLeast(1),
         minRadiusMeters = minRadiusMeters.coerceIn(100, 2000),
         maxRadiusMeters = maxRadiusMeters.coerceIn(minRadiusMeters, 5000),
+        preferredNavAppPackage = preferredNavAppPackage,
     )
 }
 
@@ -33,6 +35,7 @@ data class SearchSessionState(
     val selectedContexts: Set<SearchContext>,
     val shouldShowTooManyResultsWarning: Boolean,
     val rawOverpassElements: List<com.masterofpuppets.parkspotter.spike.OverpassElement> = emptyList(),
+    val routeGeometry: List<Pair<Double, Double>> = emptyList(),
 )
 
 enum class SearchContext {
@@ -43,6 +46,7 @@ enum class SearchContext {
 }
 
 enum class SearchSortMode {
+    BEST_ROUTE,
     DISTANCE,
     SCORE,
 }
@@ -63,7 +67,7 @@ class SearchFormState(initialRadius: Int) {
     var locationQuery by mutableStateOf("")
     var radiusMeters by mutableIntStateOf(initialRadius)
     var selectedContexts by mutableStateOf(defaultSearchContexts)
-    var sortMode by mutableStateOf(SearchSortMode.DISTANCE)
+    var sortMode by mutableStateOf(SearchSortMode.BEST_ROUTE)
     var selectedTypes by mutableStateOf(defaultSearchTypes)
 
     fun toggleContext(context: SearchContext) {
@@ -91,7 +95,7 @@ class SearchFormState(initialRadius: Int) {
 
     fun resetFilterParams() {
         selectedContexts = defaultSearchContexts
-        sortMode = SearchSortMode.DISTANCE
+        sortMode = SearchSortMode.BEST_ROUTE
         selectedTypes = defaultSearchTypes
     }
 

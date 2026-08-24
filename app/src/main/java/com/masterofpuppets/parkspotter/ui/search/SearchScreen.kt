@@ -504,9 +504,18 @@ fun SearchScreen(
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(pagedResults, key = { "${it.osmType}/${it.osmId}" }) { result ->
                         val index = sessionResults.indexOf(result)
+                        val previousStops = if (index > 0) {
+                            sessionResults.take(index).map { it.latitude to it.longitude }
+                        } else emptyList()
+
                         SearchResultCard(
                             result = result,
                             displayIndex = if (index != -1) index + 1 else null,
+                            originLat = currentSession.originLat,
+                            originLon = currentSession.originLon,
+                            allPreviousStops = previousStops,
+                            navSettings = normalizedSettings,
+                            snackbarHostState = snackbarHostState,
                             onClick = { viewModel.selectedResultForMap = result; onOpenMap() }
                         )
                     }
@@ -618,22 +627,44 @@ private fun SearchTypeSelector(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SearchSortSelector(
     selected: SearchSortMode,
     onSelected: (SearchSortMode) -> Unit,
 ) {
-    Text(text = stringResource(R.string.search_sort_label), style = MaterialTheme.typography.labelLarge)
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.horizontalScroll(rememberScrollState()),
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth()
     ) {
-        SearchSortMode.entries.forEach { mode ->
-            FilterChip(
-                selected = selected == mode,
-                onClick = { onSelected(mode) },
-                label = { Text(stringResource(mode.labelResId())) },
-            )
+        OutlinedTextField(
+            value = stringResource(selected.labelResId()),
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(stringResource(R.string.search_sort_label)) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
+                .fillMaxWidth()
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            SearchSortMode.entries.forEach { mode ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(mode.labelResId())) },
+                    onClick = {
+                        onSelected(mode)
+                        expanded = false
+                    }
+                )
+            }
         }
     }
 }
@@ -671,59 +702,148 @@ private fun SearchSessionSummaryCard(
 private fun SearchResultCard(
     result: PlaceResult,
     displayIndex: Int? = null,
+    originLat: Double? = null,
+    originLon: Double? = null,
+    allPreviousStops: List<Pair<Double, Double>> = emptyList(),
+    navSettings: SearchUiSettings,
+    snackbarHostState: SnackbarHostState,
     onClick: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val navService = remember { com.masterofpuppets.parkspotter.domain.service.navigation.NavigationServiceImpl() }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick
     ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.Top
+        Column(
+            modifier = Modifier
+                .padding(12.dp)
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            if (displayIndex != null) {
-                Text(
-                    text = "#$displayIndex",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "${result.name ?: stringResource(R.string.result_name_unknown)} [OSM ID: ${result.osmId}]",
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = stringResource(result.placeType.toApiPlaceType().labelResId()),
-                    style = MaterialTheme.typography.labelMedium,
-                )
-                HorizontalDivider()
-                Text(
-                    text = stringResource(
-                        R.string.search_result_coords_template,
-                        result.latitude,
-                        result.longitude,
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Text(
-                    text = stringResource(R.string.search_result_distance_template, result.distanceMeters),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                
-                val flagsSummary = if (result.contextMatches.isEmpty()) {
-                    "None"
-                } else {
-                    result.contextMatches.map { stringResource(it.labelResId()) }.joinToString(", ")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                if (displayIndex != null) {
+                    Text(
+                        text = "#$displayIndex",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
-                Text(
-                    text = "Context Flags: $flagsSummary",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.tertiary,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "${result.name ?: stringResource(R.string.result_name_unknown)} [OSM ID: ${result.osmId}]",
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = stringResource(result.placeType.toApiPlaceType().labelResId()),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.search_result_coords_template,
+                            result.latitude,
+                            result.longitude,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        text = stringResource(R.string.search_result_distance_template, result.distanceMeters),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    
+                    val flagsSummary = if (result.contextMatches.isEmpty()) {
+                        "None"
+                    } else {
+                        result.contextMatches.map { stringResource(it.labelResId()) }.joinToString(", ")
+                    }
+                    Text(
+                        text = "Context Flags: $flagsSummary",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+
+            HorizontalDivider()
+
+            // Navigation and Copy Actions
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Direct Navigation
+                Button(
+                    onClick = {
+                        val launched = navService.navigateDirect(
+                            context = context,
+                            destLat = result.latitude,
+                            destLon = result.longitude,
+                            destName = result.name,
+                            targetPackageName = navSettings.preferredNavAppPackage
+                        )
+                        if (!launched) {
+                            navService.copyCoordinatesToClipboard(context, result.latitude, result.longitude)
+                            scope.launch {
+                                snackbarHostState.showSnackbar(context.getString(R.string.feedback_nav_app_not_found))
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.action_navigate_direct))
+                }
+
+                // Trip Navigation (Multi-stop starting from REAL-TIME CURRENT LOCATION passing through intermediate spots)
+                if (displayIndex != null && displayIndex > 1) {
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            val currentLocation = getBestLastKnownLocation(context)
+                            val liveOrigLat = currentLocation?.latitude ?: originLat ?: result.latitude
+                            val liveOrigLon = currentLocation?.longitude ?: originLon ?: result.longitude
+
+                            val launched = navService.navigateTrip(
+                                context = context,
+                                originLat = liveOrigLat,
+                                originLon = liveOrigLon,
+                                stops = allPreviousStops,
+                                destLat = result.latitude,
+                                destLon = result.longitude,
+                                destName = result.name,
+                                targetPackageName = navSettings.preferredNavAppPackage
+                            )
+                            if (!launched) {
+                                navService.copyCoordinatesToClipboard(context, result.latitude, result.longitude)
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(context.getString(R.string.feedback_nav_app_not_found))
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.action_navigate_trip))
+                    }
+                }
+
+                // Copy Action
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        navService.copyCoordinatesToClipboard(context, result.latitude, result.longitude)
+                        scope.launch {
+                            snackbarHostState.showSnackbar(context.getString(R.string.feedback_coords_copied))
+                        }
+                    }
+                ) {
+                    Text(stringResource(R.string.action_copy_coords))
+                }
             }
         }
     }
@@ -802,6 +922,7 @@ private fun SearchContext.labelResId(): Int = when (this) {
 }
 
 private fun SearchSortMode.labelResId(): Int = when (this) {
+    SearchSortMode.BEST_ROUTE -> R.string.search_sort_best_route
     SearchSortMode.DISTANCE -> R.string.search_sort_distance
     SearchSortMode.SCORE -> R.string.search_sort_score
 }

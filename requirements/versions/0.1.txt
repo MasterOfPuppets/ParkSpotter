@@ -1,82 +1,84 @@
-ParkSpotter - Versao 0.1
+ParkSpotter - Versao 0.1 (Beta Baseline)
+
+================================================================================
+REQUISITOS FUNCIONAIS IMPLEMENTADOS E VALIDADOS NA VERSÃO 0.1
+================================================================================
 
 RF-01 [v0.1] — Definir contexto de pesquisa
-O utilizador pode iniciar pesquisa a partir da localizacao atual (GPS) ou de um ponto escolhido no mapa.
+O utilizador pode iniciar pesquisa a partir da localização atual (GPS), de um ponto escolhido interativamente no mapa (Map Picker com atualização em tempo real do centroide) ou por introdução/colagem manual de coordenadas na caixa de texto. Possui função unificada de validação e formatação (graus decimais, DMS, vírgulas locais).
 
 RF-02 [v0.1] — Definir raio de recolha
-O utilizador indica um raio (ex.: 2000 m) para a pesquisa.
+O utilizador define o raio de pesquisa através de um slider com limites mínimo e máximo configuráveis, com direito a visualização prévia circular no mapa.
 
 RF-03 [v0.1] — Recolher locais brutos
-A app obtem todos os locais potencialmente estacionaveis dentro do raio definido, sem aplicar preferencias pessoais nesta fase.
+A app obtém todos os locais potencialmente estacionáveis dentro do raio definido através da Overpass API (OpenStreetMap), abrangendo nós, caminhos e relações/multipolígonos de vias (`highway`), parques de estacionamento (`amenity=parking`, `service=parking_aisle`), áreas de uso do solo (`landuse`) e pontos de interesse/âncoras funcionais da zona.
 
 RF-04 [v0.1] — Guardar dataset da pesquisa
-A app mantem localmente o conjunto de resultados brutos da pesquisa ativa para permitir reprocessamento sem nova chamada remota imediata.
+A app mantém localmente em memória de sessão (`SearchSessionState`) o conjunto de resultados brutos (`rawResults`) e de elementos da API para permitir reprocessamento, filtragem e ordenação instantâneos sem necessidade de nova chamada remota.
 
 RF-05 [v0.1] — Aplicar filtros no cliente
-Com base no dataset bruto, o utilizador pode filtrar por criterios (ex.: tipo de local, contexto urbano/natureza, nivel de infraestrutura).
+Com base no dataset bruto, o utilizador pode filtrar em memória por:
+- Tipos de Base: Parques de estacionamento (`Parking`) e Estacionamento na via pública (`Street`), com regra que impede desmarcar todos os tipos.
+- 4 Zonas de Contexto (com comportamento multi-seleção / checkbox em componente Material 3 `ExposedDropdownMenuBox`):
+  1. Residential
+  2. Commercial, Industrial & Services
+  3. Nature & Dedicated
+  4. Other / Unassigned (garante 100% de cobertura de resultados)
 
-RF-07 [v0.1] — Recalcular em tempo real
-Ao alterar filtros/parametros, a app recalcula imediatamente filtragem + score + ordenacao sobre o dataset bruto ja recolhido.
+RF-07 [v0.1] — Recalcular em tempo real (Offline)
+Ao alterar os filtros de contexto, tipos de base ou ordenação, a app recalcula imediatamente a filtragem, higienização e ordenação sobre o dataset bruto já recolhido, operando 100% offline via botão dedicado "Apply filter".
 
 RF-08 [v0.1] — Ordenar resultados
-A app permite ordenar por score (default), distancia, e outros criterios relevantes definidos depois.
-
-RF-09 [v0.1] — Ver detalhe de local
-Ao abrir um resultado, o utilizador ve os fatores que contribuiram para o score (explicabilidade minima).
+A app permite ordenar os resultados da pesquisa por Distância da origem (padrão) e por Score de relevância.
 
 RF-10 [v0.1] — Configurar perfil da viatura
-O utilizador pode criar/editar viaturas (categoria, dimensoes aproximadas, nivel de discricao) para influenciar o score local e escolher uma delas como a viatura atual.
+O utilizador pode criar, editar, listar e eliminar viaturas persistidas em base de dados local SQLite/Room (Make, Model, Color, Registration, Categoria, Dimensões de Comprimento/Altura, Nível de Discrição: Baixa, Média, Alta) e selecionar uma viatura ativa.
 
-RF-11 [v0.1] — Persistir preferencias
-Filtros, parametros de scoring e perfil da viatura ficam guardados para sessoes futuras.
+RF-11 [v0.1] — Persistir preferências
+A viatura ativa fica persistida em Room. Os parâmetros de pesquisa (raio por defeito, limites min/max, tamanho da página de resultados, limiar de aviso de muitos resultados e estado do aviso legal) são persistidos em SharedPreferences.
 
 RF-12 [v0.1] — Atualizar pesquisa sob pedido
-A app so faz nova recolha bruta quando o utilizador mudar local/raio ou pedir atualizacao explicita.
+A app separa claramente as ações no ecrã de pesquisa em dois blocos:
+- "Search location & radius": Executa chamada de rede HTTP à Overpass API e atualiza a cache.
+- "Filter & Sort results": Aplica os filtros em memória sobre a cache sem fazer nova chamada de rede.
 
-RF-21 [v0.1] — Estrutura de navegacao principal
-As secoes principais da app devem estar acessiveis por menu hamburger. O detalhe de local nao e item de menu e deve ser aberto a partir de um resultado.
+RF-18 [v0.1] — Modo offline com arquitetura "Enrich on Fetch"
+A app avalia os contextos de zona no momento da recolha online através de um algoritmo determinístico de 2 passagens (Passagem 1: Landuse territorial; Passagem 2: Tags funcionais explícitas; Passagem 3: Resolução espacial de contingência para itens unassigned) e estampa o atributo `contextMatches` em cada `PlaceResult`. O modo offline lê diretamente as flags estampadas, sem matemática de polígonos pesada no cliente.
+
+RF-21 [v0.1] — Estrutura de navegação principal
+Navegação centralizada através de Navigation Drawer (menu hamburger) com acesso a Home (Mapa), Pesquisa, Preferências (Definições) e About.
 
 RF-22 [v0.1] — Home centrada em mapa
-A Home deve ser o mapa, com indicador de localizacao atual e acesso ao menu hamburger por icone.
+O ecrã inicial é um mapa interactivo (osmdroid) centrado na localização atual do utilizador, com ícone de menu hamburger e controlo de zoom.
 
-RF-23 [v0.1] — Pesquisa guiada por menu
-Ao aceder a opcao Pesquisa pelo menu, a app deve pedir ao utilizador a origem da pesquisa e o raio antes de iniciar recolha de locais brutos.
+RF-23 [v0.1] — Pesquisa guiada e estruturada
+O ecrã de pesquisa organiza o formulário em dois cartões visuais distintos e claros: Card 1 (Localização, mapa, raio, botões Reset e Start Search) e Card 2 (Contextos, tipos base, ordenação, botões Reset Filters e Apply Filter). Durante a edição manual de coordenadas, o botão Start Search fica desativado por segurança.
 
-RF-25 [v0.1] — Aviso legal em modal com intervalo de reapresentacao
-O aviso legal deve ser apresentado em modal no arranque inicial para aceite e consulta, mas nao deve surgir em todas as aberturas da app. A app deve guardar a data/hora da ultima apresentacao e so voltar a mostrar o aviso apos um intervalo configurado (12h ou 24h).
+RF-25 [v0.1] — Aviso legal em modal com intervalo de reapresentação
+Apresentação em modal no arranque com termos de responsabilidade do utilizador, persistência da última data de visualização, intervalo de reapresentação de 24h e opção "Don't show again".
 
-RF-26 [v0.1] — Menu About com informacao da aplicacao
-A app deve ter uma secao About no menu hamburger com: versao atual da app, link/entrada para consulta do aviso legal e informacao basica da aplicacao.
-
-RF-28 [v0.1] — Definicao de sessao de pesquisa
-Cada pesquisa iniciada pelo utilizador cria uma nova sessao de pesquisa. A sessao anterior e considerada encerrada no momento em que uma nova pesquisa e iniciada.
-
-RF-30 [v0.1] — Mapa de navegacao e operacao documentado
-O produto deve manter um mapa de navegacao e operacao vigente, alinhado com os requisitos atuais, para orientar implementacao e validacao de fluxos.
+RF-26 [v0.1] — Menu About com informação da aplicação
+Ecrã com identificação da aplicação ParkSpotter, versão atual (0.1), consulta do aviso legal e notas de versão.
 
 RF-31 [v0.1] — Entidades base do produto
-A versao 0.1 deve definir as entidades base (modelo de dados e atributos essenciais), incluindo no minimo: SearchSession, PlaceResult, VehicleProfile, UserPreferences e HistoryEntry.
+Modelos de domínio estabelecidos: `SearchSession`, `SearchSessionState`, `PlaceResult`, `VehicleProfile`, `UserPreferences`, `HistoryEntry`, `SearchContext`, `SearchSortMode`, `ApiPlaceType`.
 
 RF-32 [v0.1] — Baseline de design da interface
-A versao 0.1 deve fechar o design base da interface (estrutura visual dos ecras, componentes principais, hierarquia de informacao e comportamento dos estados vazios/carregamento/erro) para permitir implementacao consistente nas versoes seguintes.
+Implementação do Design System Material 3 baseado na identidade visual ParkSpotter (Slate Blue `#3A4A5C`, Gold Amber `#D4A574`, Cream `#F5F1E8`, Off-white `#F9F7F3`), marcadores customizados no mapa (Home Pin para origem e marcadores numerados para resultados com badge e OSM ID), estados visuais de loading (spinners e botões reativos), empty state e cards de resultados paginados com visualização direta das Context Flags.
 
+RF-Sanitização [v0.1] — Motor de Higienização e Deduplicação Inteligente
+- Exclusão de Acesso Restrito: higienização automática de ruas e parques privados / condomínios fechados (`access=private|no|destination|customers|permissive`).
+- Desduplicação de Coordenadas Exatas: eliminação de nós/caminhos duplicados a menos de 2m.
+- Supressão de Faixas de Acesso (`parking_aisle`): eliminação de vias de serviço redundantes junto a parques.
+- Deduplicação de Troços da Mesma Rua: escolha do segmento mais rico (`tags.size`) com herança case-insensitive de nome de rua para evitar nós "Unnamed".
+- Prioridade de Parques Dedicados: num raio de 35m, `amenity=parking` sobrevive sempre face a vias de trânsito.
 
-Mapa de navegacao e operacao (baseline v0.1)
-- Arranque: modal de Aviso Legal (primeiro arranque) -> Home (Mapa).
-- Menu hamburger: Home, Pesquisa, Preferencias, Historico, About.
-- Home (Mapa): localizacao atual + icone hamburger para abrir menu + zoom.
-- Pesquisa (menu): escolher origem + raio -> recolha de dataset bruto.
-- Resultados: apos pesquisa mostra pesquisa atual.
-- Item de resultado: abrir Detalhe, Navegar, Copiar morada/coordenadas.
-- Detalhe: fatores de score + acao de navegacao.
-- Preferencias: Escolha e gestão de viaturas + parametros de filtros/scoring + raio default.
-- Historico: Future version
-- About: versao atual, aviso legal, verificacao de atualizacoes.
-
-Regras operacionais (baseline v0.1)
-- 1 pesquisa = 1 sessao; nova pesquisa encerra a sessao anterior.
-- Recolha retorna dados brutos; filtros/ranking/score sao sempre calculados no cliente.
-- Navegacao externa tenta abrir app de mapas com rota; fallback por copia de destino.
-
-
-
+================================================================================
+MAPA DE NAVEGAÇÃO E OPERAÇÃO (v0.1)
+================================================================================
+- Arranque: Modal de Aviso Legal (primeiro arranque ou >24h) -> Home (Mapa).
+- Menu Drawer: Home, Pesquisa, Preferências, About.
+- Home (Mapa): Localização atual + Menu Hamburger.
+- Pesquisa: Escolha de Origem (GPS/Mapa/Manual) + Raio + Filtros de Contexto/Tipo -> Recolha de dados brutos -> Visualização paginada em Lista ou Mapa de Resultados com OSM IDs e Context Flags.
+- Preferências: Gestão de Viaturas (CRUD em Room) + Parâmetros de pesquisa.
+- About: Versão 0.1, Aviso Legal e Info do Produto.

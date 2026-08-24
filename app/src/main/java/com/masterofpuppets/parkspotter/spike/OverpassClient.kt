@@ -38,7 +38,7 @@ object OverpassClient {
                 val request = Request.Builder()
                     .url(ENDPOINT)
                     .addHeader("Accept", "*/*")
-                    .addHeader("User-Agent", "ParkSpotter/0.1 (Android)")
+                    .addHeader("User-Agent", "ParkSpotter/0.2 (Android)")
                     .post(body)
                     .build()
 

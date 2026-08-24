@@ -98,6 +98,7 @@ class MainActivity : ComponentActivity() {
             warnIfResultsAbove = appSettingsPrefs.getInt(WARN_IF_RESULTS_ABOVE_KEY, 150),
             minRadiusMeters = appSettingsPrefs.getInt(MIN_RADIUS_METERS_KEY, 200),
             maxRadiusMeters = appSettingsPrefs.getInt(MAX_RADIUS_METERS_KEY, 800),
+            preferredNavAppPackage = appSettingsPrefs.getString("preferred_nav_app_package", "system_default") ?: "system_default",
         ).normalized()
 
         setContent {
@@ -118,6 +119,7 @@ class MainActivity : ComponentActivity() {
                             putInt(WARN_IF_RESULTS_ABOVE_KEY, updated.warnIfResultsAbove)
                             putInt(MIN_RADIUS_METERS_KEY, updated.minRadiusMeters)
                             putInt(MAX_RADIUS_METERS_KEY, updated.maxRadiusMeters)
+                            putString("preferred_nav_app_package", updated.preferredNavAppPackage)
                         }
                     },
                 )
@@ -282,9 +284,15 @@ private fun ParkSpotterApp(
                             originLat = currentSearchSession.originLat,
                             originLon = currentSearchSession.originLon,
                             resultsWithIndex = mapResults,
+                            allResults = allResults,
+                            routeGeometry = currentSearchSession.routeGeometry,
                             currentPage = currentPageDisplay,
                             totalPages = totalPagesDisplay,
                             isSingleResultMode = singleResult != null,
+                            navSettings = searchSettings,
+                            onSelectResult = { selectedPlace ->
+                                searchViewModel.selectedResultForMap = selectedPlace
+                            },
                             onNextPage = {
                                 if (singleResult != null) {
                                     val currentIndex = allResults.indexOf(singleResult)

@@ -9,7 +9,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -84,6 +91,52 @@ fun SettingsScreen(
                 }
                 Button(onClick = { showManageDialog = true }) {
                     Text("Change")
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.padding(4.dp))
+
+        // Preferred Navigation App (Dynamically discovered from system PackageManager)
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val navService = remember { com.masterofpuppets.parkspotter.domain.service.navigation.NavigationServiceImpl() }
+        val installedApps = remember(context) { navService.getInstalledNavigationApps(context) }
+        var navDropdownExpanded by remember { mutableStateOf(false) }
+
+        val currentNavApp = installedApps.find { it.packageName == settings.preferredNavAppPackage }
+            ?: installedApps.firstOrNull { it.isSystemDefault }
+        val currentNavLabel = currentNavApp?.appName ?: stringResource(R.string.settings_nav_app_system_default)
+
+        @OptIn(ExperimentalMaterial3Api::class)
+        ExposedDropdownMenuBox(
+            expanded = navDropdownExpanded,
+            onExpandedChange = { navDropdownExpanded = !navDropdownExpanded },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            OutlinedTextField(
+                value = currentNavLabel,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text(stringResource(R.string.settings_nav_app_label)) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = navDropdownExpanded) },
+                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
+                    .fillMaxWidth()
+            )
+
+            ExposedDropdownMenu(
+                expanded = navDropdownExpanded,
+                onDismissRequest = { navDropdownExpanded = false }
+            ) {
+                installedApps.forEach { app ->
+                    DropdownMenuItem(
+                        text = { Text(app.appName) },
+                        onClick = {
+                            onSettingsChanged(settings.copy(preferredNavAppPackage = app.packageName).normalized())
+                            navDropdownExpanded = false
+                        }
+                    )
                 }
             }
         }

@@ -120,16 +120,17 @@ class SearchViewModel(
             )
 
             uiState = result.fold(
-                onSuccess = { (rawList, filteredList, rawElements) ->
+                onSuccess = { execResult ->
                     searchSession = SearchSessionState(
                         originLat = coords.first,
                         originLon = coords.second,
                         radiusMeters = radius,
-                        rawResults = rawList,
-                        filteredResults = filteredList,
+                        rawResults = execResult.rawResults,
+                        filteredResults = execResult.filteredResults,
                         selectedContexts = searchFormState.selectedContexts,
-                        shouldShowTooManyResultsWarning = filteredList.size > normalizedSettings.warnIfResultsAbove,
-                        rawOverpassElements = rawElements,
+                        shouldShowTooManyResultsWarning = execResult.filteredResults.size > normalizedSettings.warnIfResultsAbove,
+                        rawOverpassElements = execResult.rawElements,
+                        routeGeometry = execResult.routeGeometry,
                     )
                     
                     isSearchConfigExpanded = false
