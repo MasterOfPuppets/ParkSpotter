@@ -8,6 +8,7 @@ import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
+import java.util.Locale
 
 import okio.IOException
 
@@ -77,6 +78,97 @@ object OverpassClient {
                 Result.failure(e)
             }
         }
+
+    suspend fun queryZoneClassificationData(
+        lat: Double,
+        lon: Double,
+        radiusMeters: Int,
+    ): Result<List<OverpassElement>> = withContext(Dispatchers.IO) {
+        try {
+            val formattedLat = String.format(Locale.US, "%.6f", lat)
+            val formattedLon = String.format(Locale.US, "%.6f", lon)
+            val query = """
+                [out:json][timeout:45];
+                (
+                  way["landuse"~"residential|industrial|commercial"](around:$radiusMeters,$formattedLat,$formattedLon);
+                  relation["landuse"~"residential|industrial|commercial"](around:$radiusMeters,$formattedLat,$formattedLon);
+                )->.zones;
+                (
+                  way["building"~"detached|house|semidetached_house|apartments"](around:$radiusMeters,$formattedLat,$formattedLon);
+                  way["highway"~"residential|living_street|tertiary|unclassified|service|motorway|trunk|primary"](around:$radiusMeters,$formattedLat,$formattedLon);
+                  node["amenity"~"parking|nightclub|bar|pub"](around:$radiusMeters,$formattedLat,$formattedLon);
+                  way["amenity"~"parking|nightclub|bar|pub"](around:$radiusMeters,$formattedLat,$formattedLon);
+                  node["barrier"="gate"](around:$radiusMeters,$formattedLat,$formattedLon);
+                  node["place"~"neighbourhood|suburb"](around:$radiusMeters,$formattedLat,$formattedLon);
+                )->.features;
+                .zones out center geom;
+                .features out center;
+            """.trimIndent()
+
+            val body = FormBody.Builder().add("data", query).build()
+            val request = Request.Builder()
+                .url(ENDPOINT)
+                .addHeader("Accept", "application/json")
+                .addHeader("User-Agent", "ParkSpotter/0.2 (Android)")
+                .post(body)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw IOException("HTTP_${response.code}")
+                }
+
+                val json = response.body?.string()
+                    ?: return@withContext Result.failure(Exception("Empty response"))
+                val elements = gson.fromJson(json, OverpassResponse::class.java).elements
+                Result.success(elements)
+            }
+        } catch (error: Exception) {
+            Log.e(TAG, "Zone classification request failed: ${error.message}", error)
+            Result.failure(error)
+        }
+    }
+
+    suspend fun queryRouteServiceAlternatives(
+        routePoints: List<Pair<Double, Double>>,
+        corridorMeters: Int,
+    ): Result<List<OverpassElement>> = withContext(Dispatchers.IO) {
+        require(routePoints.size >= 2)
+        try {
+            val routeCoordinates = routePoints.joinToString(",") { (lat, lon) ->
+                String.format(Locale.US, "%.6f,%.6f", lat, lon)
+            }
+            val query = """
+                [out:json][timeout:30];
+                (
+                  node["highway"~"services|rest_area"](around:$corridorMeters,$routeCoordinates);
+                  way["highway"~"services|rest_area"](around:$corridorMeters,$routeCoordinates);
+                  node["amenity"="fuel"]["opening_hours"="24/7"]["parking"="surface"](around:$corridorMeters,$routeCoordinates);
+                  way["amenity"="fuel"]["opening_hours"="24/7"]["parking"="surface"](around:$corridorMeters,$routeCoordinates);
+                );
+                out center;
+            """.trimIndent()
+            val body = FormBody.Builder().add("data", query).build()
+            val request = Request.Builder()
+                .url(ENDPOINT)
+                .addHeader("Accept", "application/json")
+                .addHeader("User-Agent", "ParkSpotter/0.2 (Android)")
+                .post(body)
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw IOException("HTTP_${response.code}")
+                }
+                val json = response.body?.string()
+                    ?: return@withContext Result.failure(Exception("Empty response"))
+                val elements = gson.fromJson(json, OverpassResponse::class.java).elements
+                Result.success(elements)
+            }
+        } catch (error: Exception) {
+            Log.e(TAG, "Route service alternatives request failed: ${error.message}", error)
+            Result.failure(error)
+        }
+    }
 
     private fun buildQuery(lat: Double, lon: Double, radius: Int): String {
         val formattedLat = String.format(java.util.Locale.US, "%.6f", lat)

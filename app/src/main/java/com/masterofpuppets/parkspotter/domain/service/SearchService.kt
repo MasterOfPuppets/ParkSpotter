@@ -11,7 +11,8 @@ interface SearchService {
         radiusMeters: Int,
         selectedTypes: Set<ApiPlaceType>,
         sortMode: SearchSortMode,
-        contexts: Set<com.masterofpuppets.parkspotter.ui.search.SearchContext> = com.masterofpuppets.parkspotter.ui.search.defaultSearchContexts
+        contexts: Set<com.masterofpuppets.parkspotter.ui.search.SearchContext> = com.masterofpuppets.parkspotter.ui.search.defaultSearchContexts,
+        freeOnly: Boolean = false
     ): Result<SearchExecutionResult>
 
     fun applyLocalFilter(
@@ -19,7 +20,8 @@ interface SearchService {
         selectedTypes: Set<ApiPlaceType>,
         sortMode: SearchSortMode,
         contexts: Set<com.masterofpuppets.parkspotter.ui.search.SearchContext>,
-        rawOverpassElements: List<com.masterofpuppets.parkspotter.spike.OverpassElement> = emptyList()
+        rawOverpassElements: List<com.masterofpuppets.parkspotter.spike.OverpassElement> = emptyList(),
+        freeOnly: Boolean = false
     ): List<PlaceResult>
 }
 

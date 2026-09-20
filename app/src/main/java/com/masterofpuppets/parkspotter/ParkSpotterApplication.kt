@@ -8,6 +8,8 @@ import com.masterofpuppets.parkspotter.domain.service.SearchService
 import com.masterofpuppets.parkspotter.domain.service.SearchServiceImpl
 import com.masterofpuppets.parkspotter.domain.service.VehicleService
 import com.masterofpuppets.parkspotter.domain.service.VehicleServiceImpl
+import com.masterofpuppets.parkspotter.domain.service.zone.ZoneClassificationService
+import com.masterofpuppets.parkspotter.domain.service.zone.ZoneClassificationServiceImpl
 
 class ParkSpotterApplication : Application() {
     
@@ -29,6 +31,10 @@ class ParkSpotterApplication : Application() {
     // Lazy initialization of search service
     val searchService: SearchService by lazy {
         SearchServiceImpl()
+    }
+
+    val zoneClassificationService: ZoneClassificationService by lazy {
+        ZoneClassificationServiceImpl()
     }
 
     override fun onCreate() {

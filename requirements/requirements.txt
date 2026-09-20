@@ -55,6 +55,200 @@ Segmentação de funcionalidades por plano:
 - Pago: heatmap de segurança, previsões de ocupação, alertas inteligentes e sincronização cloud multi-dispositivo.
 
 ================================================================================
+MÓDULO 5: RECOMENDAÇÃO DE ZONAS EM LOCALIDADES DESCONHECIDAS
+================================================================================
+
+RF-35 — Descobrir zonas adequadas numa localidade
+O utilizador deve poder indicar uma cidade, vila, localidade ou ponto no mapa e
+pedir à app uma avaliação das zonas circundantes para procurar um local de
+paragem ou pernoita discreta.
+
+RF-36 — Divisão geográfica da localidade em zonas
+A app deve dividir a área analisada em zonas compreensíveis para o utilizador,
+preferindo limites geográficos reconhecíveis (bairro, lugar, freguesia ou
+outra área OSM disponível) e utilizando células geográficas como alternativa
+quando esses limites não existirem.
+
+RF-37 — Classificação de adequação das zonas
+Cada zona deve receber uma classificação de adequação e um nível de confiança,
+calculados com base nos dados geográficos disponíveis, nos tags OSM, no perfil
+da viatura activa, nos filtros da pesquisa e no nível de discrição pretendido.
+O resultado deve distinguir, no mínimo: mais adequada, adequada, possível com
+verificação e desaconselhada.
+
+RF-38 — Factores explicativos da recomendação
+Ao seleccionar uma zona, o utilizador deve ver os factores positivos e
+negativos que contribuíram para a classificação, incluindo, quando disponíveis:
+carácter residencial ou natural, tipo de vias, estacionamento, iluminação,
+superfície, acessos, restrições, proximidade de vias principais e serviços.
+
+RF-39 — Visualização das zonas no mapa
+As zonas recomendadas devem ser apresentadas como uma camada geográfica no mapa,
+com diferenciação visual por classificação, legenda, nome da zona e acesso à
+lista ordenada das zonas avaliadas.
+
+RF-40 — Acção a partir de uma zona recomendada
+O utilizador deve poder iniciar uma pesquisa detalhada dentro da zona
+seleccionada, consultar os locais encontrados, abrir a navegação e regressar à
+avaliação global da localidade.
+
+RF-41 — Limites e transparência da recomendação
+As recomendações devem ser apresentadas como avaliação automática baseada em
+dados, não como garantia de legalidade, segurança ou disponibilidade. A app
+deve destacar a necessidade de confirmar sinalização local e excluir ou
+penalizar zonas com indícios de propriedade privada, acesso condicionado ou
+restrições relevantes.
+
+RF-42 — Actualidade e origem dos dados
+Cada avaliação deve indicar a data da consulta, a origem dos dados utilizados
+e o nível de confiança. A app deve tratar explicitamente dados incompletos,
+desactualizados, contraditórios ou ausência de rede.
+
+RF-43 — Cache e funcionamento degradado
+A app deve poder reutilizar avaliações e dados geográficos recentemente obtidos
+quando estiver offline, indicando a idade da informação e evitando apresentar
+dados antigos como confirmação actual.
+
+RF-44 — Recalcular recomendações com contexto
+O utilizador deve poder alterar raio, perfil de viatura, nível de discrição,
+hora/contexto da pesquisa e filtros relevantes, solicitando o recálculo das
+zonas sem perder a localidade seleccionada.
+
+RF-45 — Histórico da avaliação de zonas
+Uma avaliação de localidade deve poder ser associada à sessão de pesquisa,
+guardando a localidade, zona seleccionada, factores apresentados, classificação,
+data e acções posteriores do utilizador.
+
+
+
+
+Lista de sugestões para o módulo 5
+Especificação Técnica: Motor Macro de Triagem de Zonas (V1 - Algorítmico)
+1. Objetivo
+Implementar uma camada intermédia de triagem geográfica (macro-routing). Dado um destino (pesquisa de cidade/concelho), o sistema deve extrair, processar e devolver automaticamente as 3 a 4 melhores zonas/pontos para pernoita discreta (stealth camping), assentes em dados abertos e regras morfológicas urbanas. Ao chegar à zona selecionada, a aplicação ativa o motor micro existente (200–500m).
+2. Dependências Técnicas e APIs (100% Gratuitas e Globais)
+Função	Serviço / Biblioteca	Propósito Técnico
+Geocoding	Photon API (photon.komoot.io) ou Nominatim OSM	Recebe a string de pesquisa (ex.: "Santarém") e devolve o centróide e a Bounding Box (BBox) da localidade.
+Extração Geográfica	Overpass API (OpenStreetMap)	Executa consultas estruturadas (Overpass QL) para extrair polígonos de uso de solo, tipologia de vias e POIs na BBox.
+Cálculo Espacial	Turf.js (Node) ou Shapely / GeoPandas (Python)	Determina centróides, áreas (m²), interseções de polígonos e testes de contenção espacial.
+Persistência / Cache	SQLite (SpatiaLite), PostgreSQL (PostGIS) ou Redis	Guarda em cache os resultados calculados por cidade para resposta imediata (<200ms) e para evitar os limites de pedidos da Overpass API.
+3. Heurística e Regras de Classificação (Tags OSM)
+A extração baseia-se em 3 categorias estritamente objetivas:
+Categoria A: Residencial Calmo (Moradias / Baixa Densidade)
+Critérios de Seleção:
+Polígono com landuse=residential.
+Presença predominante de building=detached, building=house ou building=semidetached (e baixa presença relativa de building=apartments).
+Arruamentos interiores com highway=residential ou highway=living_street.
+Vias públicas: sem tags restritivas (access=private ou access=no).
+Ausência de fontes de ruído noturno imediato (amenity=nightclub|bar|pub).
+Resolução do Nome:
+Se o polígono contiver ou intersetar um nó place=neighbourhood ou place=suburb, adota esse name=* (ex.: "São Bento", "Alto do Bexiga"). Caso contrário, adota o nome da via residencial principal.
+Categoria B: Parque Empresarial / Industrial
+Critérios de Seleção:
+Polígono com landuse=industrial ou landuse=commercial.
+Arruamentos interiores acessíveis: highway=residential|tertiary|unclassified.
+Filtro de exclusão: descartar perímetros fechados com barrier=gate + access=private.
+Resolução do Nome:
+Atributo name=* do próprio polígono (ex.: "Zona Industrial de Santarém") ou o nome da principal avenida industrial.
+Categoria C: Ponto de Trânsito / Serviço 24/7
+Critérios de Seleção:
+highway=services (áreas de serviço de autoestrada/vias reservadas).
+highway=rest_area (áreas de repouso).
+amenity=fuel com presença obrigatória de opening_hours=24/7 e parking=surface.
+Resolução do Nome:
+Atributo name=* ou brand=* (ex.: "Área de Serviço Repsol - A1").
+4. Pipeline de Execução (Fluxo Operacional)
+code
+Text
+[Input: Utilizador pesquisa "Santarém"]
+       │
+       ▼
+[1. Geocoding (Photon/Nominatim)]
+       │  Devolve coordenadas centrais + Bounding Box (BBox)
+       ▼
+[2. Verificação de Cache]
+       ├─► EXISTE: Devolve imediatamente o JSON das zonas guardadas.
+       └─► NÃO EXISTE: Prossegue para consulta Overpass API.
+       │
+       ▼
+[3. Consulta Overpass API]
+       │  Executa script Overpass QL limitado à BBox da cidade.
+       ▼
+[4. Filtragem & Ranking Morfológico]
+       ├─ Residencial: Ordena polígonos residenciais por menor densidade de edifícios.
+       ├─ Industrial: Identifica o maior polígono industrial público desobstruído.
+       └─ Trânsito 24/7: Identifica os nós/áreas 24h mais próximos dos acessos viários.
+       │
+       ▼
+[5. Cálculo do Ponto de Chegada (Navegação)]
+       │  Calcula o Centróide Geométrico de cada zona selecionada.
+       ▼
+[6. Gravação em Cache & Output para UI]
+       │  Devolve 3 a 4 "Cards de Zona" com:
+       │  - Nome da Zona / Ponto
+       │  - Tipologia (Residencial / Industrial / Serviço 24/7)
+       │  - Coordenada de Destino (Centróide)
+       ▼
+[7. Chegada do Utilizador à Zona]
+       │  A app transita automaticamente para o motor micro (200–500m).
+5. Estrutura do Objeto de Resposta (Exemplo de Payload)
+code
+JSON
+[
+  {
+    "id": "zone_res_01",
+    "type": "residential_low_density",
+    "name": "São Bento / Alto do Bexiga",
+    "description": "Zona residencial de moradias, calma e com estacionamento na rua.",
+    "target_coordinate": {
+      "lat": 39.2384,
+      "lng": -8.6891
+    },
+    "osm_reference": "way/12345678"
+  },
+  {
+    "id": "zone_ind_01",
+    "type": "industrial_park",
+    "name": "Zona Industrial de Santarém",
+    "description": "Arruamentos amplos, sem habitação, ideal para estacionamento desimpedido.",
+    "target_coordinate": {
+      "lat": 39.2512,
+      "lng": -8.6723
+    },
+    "osm_reference": "way/87654321"
+  },
+  {
+    "id": "point_srv_01",
+    "type": "service_station_24_7",
+    "name": "Área de Serviço A1 - Santarém",
+    "description": "Combustível, WC e vigilância contínua 24h.",
+    "target_coordinate": {
+      "lat": 39.2710,
+      "lng": -8.6540
+    },
+    "osm_reference": "node/11223344"
+  }
+]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+================================================================================
 DESIGN SYSTEM & IDENTIDADE VISUAL
 ================================================================================
 

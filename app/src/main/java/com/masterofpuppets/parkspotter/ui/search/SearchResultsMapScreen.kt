@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +38,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import com.masterofpuppets.parkspotter.R
+import com.masterofpuppets.parkspotter.spike.toApiPlaceType
 import com.masterofpuppets.parkspotter.domain.model.PlaceResult
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -211,17 +213,39 @@ fun SearchResultsMapScreen(
                         )
                         IconButton(onClick = { onSelectResult(activeResult) }) {
                             Icon(
-                                imageVector = Icons.Default.ChevronRight,
+                                imageVector = Icons.Default.Close,
                                 contentDescription = "Close"
                             )
                         }
                     }
 
-                    Text(
-                        text = "OSM ID: ${activeResult.osmId} • ${activeResult.placeType} • ${stringResource(R.string.search_result_distance_template, activeResult.distanceMeters)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "OSM ID: ${activeResult.osmId} • ${stringResource(activeResult.placeType.toApiPlaceType().labelResId())} • ${stringResource(R.string.search_result_distance_template, activeResult.distanceMeters)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        val badgeColor = if (activeResult.isFree) Color(0xFF2D6A4F) else Color(0xFFB3261E)
+                        Surface(
+                            color = badgeColor.copy(alpha = 0.1f),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, badgeColor.copy(alpha = 0.5f))
+                        ) {
+                            Text(
+                                text = if (activeResult.isFree) stringResource(R.string.result_free_badge) else stringResource(R.string.result_paid_badge),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = badgeColor,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            )
+                        }
+                    }
 
                     androidx.compose.material3.HorizontalDivider()
 

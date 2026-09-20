@@ -33,6 +33,7 @@ data class SearchSessionState(
     val rawResults: List<PlaceResult>,
     val filteredResults: List<PlaceResult>,
     val selectedContexts: Set<SearchContext>,
+    val freeOnly: Boolean = false,
     val shouldShowTooManyResultsWarning: Boolean,
     val rawOverpassElements: List<com.masterofpuppets.parkspotter.spike.OverpassElement> = emptyList(),
     val routeGeometry: List<Pair<Double, Double>> = emptyList(),
@@ -69,6 +70,7 @@ class SearchFormState(initialRadius: Int) {
     var selectedContexts by mutableStateOf(defaultSearchContexts)
     var sortMode by mutableStateOf(SearchSortMode.BEST_ROUTE)
     var selectedTypes by mutableStateOf(defaultSearchTypes)
+    var freeOnly by mutableStateOf(false)
 
     fun toggleContext(context: SearchContext) {
         selectedContexts = if (selectedContexts.contains(context)) {
@@ -97,6 +99,7 @@ class SearchFormState(initialRadius: Int) {
         selectedContexts = defaultSearchContexts
         sortMode = SearchSortMode.BEST_ROUTE
         selectedTypes = defaultSearchTypes
+        freeOnly = false
     }
 
     fun reset(initialRadius: Int) {

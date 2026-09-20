@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -65,6 +66,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.platform.LocalContext
@@ -77,6 +79,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import com.masterofpuppets.parkspotter.R
+import com.masterofpuppets.parkspotter.spike.toApiPlaceType
 import com.masterofpuppets.parkspotter.domain.model.PlaceResult
 import com.masterofpuppets.parkspotter.spike.ApiPlaceType
 import com.masterofpuppets.parkspotter.spike.OverpassClient
@@ -424,7 +427,9 @@ fun SearchScreen(
                     )
                     SearchTypeSelector(
                         selectedTypes = formState.selectedTypes,
-                        onSelectedTypes = { formState.selectedTypes = it }
+                        freeOnly = formState.freeOnly,
+                        onSelectedTypes = { formState.selectedTypes = it },
+                        onFreeOnlyChanged = { formState.freeOnly = it }
                     )
                     SearchSortSelector(
                         selected = formState.sortMode,
@@ -598,7 +603,9 @@ private fun SearchContextSelector(
 @Composable
 private fun SearchTypeSelector(
     selectedTypes: Set<ApiPlaceType>,
+    freeOnly: Boolean,
     onSelectedTypes: (Set<ApiPlaceType>) -> Unit,
+    onFreeOnlyChanged: (Boolean) -> Unit,
 ) {
     Text(text = stringResource(R.string.search_types_label), style = MaterialTheme.typography.labelLarge)
     val options = listOf(
@@ -624,6 +631,19 @@ private fun SearchTypeSelector(
                 label = { Text(stringResource(option.labelResId())) },
             )
         }
+
+        FilterChip(
+            selected = freeOnly,
+            onClick = { onFreeOnlyChanged(!freeOnly) },
+            label = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(stringResource(R.string.search_free_only_label))
+                }
+            },
+            leadingIcon = if (freeOnly) {
+                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+            } else null
+        )
     }
 }
 
@@ -741,10 +761,31 @@ private fun SearchResultCard(
                         text = "${result.name ?: stringResource(R.string.result_name_unknown)} [OSM ID: ${result.osmId}]",
                         fontWeight = FontWeight.Bold,
                     )
-                    Text(
-                        text = stringResource(result.placeType.toApiPlaceType().labelResId()),
-                        style = MaterialTheme.typography.labelMedium,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(result.placeType.toApiPlaceType().labelResId()),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        
+                        val badgeColor = if (result.isFree) Color(0xFF2D6A4F) else Color(0xFFB3261E)
+                        Surface(
+                            color = badgeColor.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(4.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, badgeColor.copy(alpha = 0.5f))
+                        ) {
+                            Text(
+                                text = if (result.isFree) stringResource(R.string.result_free_badge) else stringResource(R.string.result_paid_badge),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = badgeColor,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                     Text(
                         text = stringResource(
                             R.string.search_result_coords_template,
@@ -927,16 +968,6 @@ private fun SearchSortMode.labelResId(): Int = when (this) {
     SearchSortMode.SCORE -> R.string.search_sort_score
 }
 
-private fun ApiPlaceType.labelResId(): Int = when (this) {
-    ApiPlaceType.PARKING -> R.string.place_type_parking
-    ApiPlaceType.STREET -> R.string.place_type_street
-    ApiPlaceType.PARK -> R.string.place_type_park
-    ApiPlaceType.CAMP_SITE -> R.string.place_type_camp_site
-    ApiPlaceType.UNKNOWN -> R.string.place_type_unknown
-}
-
-private fun String.toApiPlaceType(): ApiPlaceType = ApiPlaceType.entries.firstOrNull { it.key == this } ?: ApiPlaceType.UNKNOWN
-
 private fun calculateRadiusPreviewZoom(
     radiusMeters: Int,
     centerLatitude: Double,
@@ -1091,6 +1122,7 @@ private fun getBestLastKnownLocation(context: Context): Location? {
 fun MapLocationPickerDialog(
     initialLat: Double?,
     initialLon: Double?,
+    initialZoom: Double = 16.0,
     onDismiss: () -> Unit,
     onConfirm: (Double, Double) -> Unit,
     onGetCurrentLocation: () -> GeoPoint?
@@ -1139,7 +1171,7 @@ fun MapLocationPickerDialog(
                                 setTileSource(TileSourceFactory.MAPNIK)
                                 setMultiTouchControls(true)
                                 zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-                                controller.setZoom(16.0)
+                                controller.setZoom(initialZoom)
                                 controller.setCenter(mapCenter)
                                 
                                 addMapListener(object : MapListener {

@@ -15,10 +15,16 @@ data class OsrmTripResult(
     val geometryCoordinates: List<Pair<Double, Double>> // List of (Lat, Lon)
 )
 
+data class OsrmRouteResult(
+    val geometryCoordinates: List<Pair<Double, Double>>,
+    val distanceMeters: Double,
+)
+
 object OsrmRoutingClient {
 
     private const val TAG = "OsrmRoutingClient"
     private const val BASE_URL = "https://router.project-osrm.org/trip/v1/driving"
+    private const val ROUTE_BASE_URL = "https://router.project-osrm.org/route/v1/driving"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -94,10 +100,63 @@ object OsrmRoutingClient {
         }
     }
 
+    suspend fun computeDirectRoute(
+        originLat: Double,
+        originLon: Double,
+        destinationLat: Double,
+        destinationLon: Double,
+    ): Result<OsrmRouteResult> = withContext(Dispatchers.IO) {
+        try {
+            val coordinates = String.format(
+                Locale.US,
+                "%.6f,%.6f;%.6f,%.6f",
+                originLon,
+                originLat,
+                destinationLon,
+                destinationLat,
+            )
+            val request = Request.Builder()
+                .url("$ROUTE_BASE_URL/$coordinates?geometries=geojson&overview=full")
+                .addHeader("User-Agent", "ParkSpotter/0.2 (Android)")
+                .get()
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(Exception("OSRM_HTTP_${response.code}"))
+                }
+                val json = response.body?.string()
+                    ?: return@withContext Result.failure(Exception("Empty OSRM response"))
+                val parsed = gson.fromJson(json, OsrmRouteResponse::class.java)
+                val route = parsed.routes.firstOrNull()
+                    ?: return@withContext Result.failure(Exception("No OSRM route"))
+                val geometry = route.geometry?.coordinates.orEmpty().mapNotNull { coordinate ->
+                    if (coordinate.size >= 2) coordinate[1] to coordinate[0] else null
+                }
+                Result.success(
+                    OsrmRouteResult(
+                        geometryCoordinates = geometry,
+                        distanceMeters = route.distance,
+                    ),
+                )
+            }
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+
     private data class OsrmTripResponse(
         val code: String = "",
         val trips: List<OsrmTrip> = emptyList(),
         val waypoints: List<OsrmWaypoint> = emptyList()
+    )
+
+    private data class OsrmRouteResponse(
+        val routes: List<OsrmRoute> = emptyList(),
+    )
+
+    private data class OsrmRoute(
+        val distance: Double = 0.0,
+        val geometry: OsrmGeometry? = null,
     )
 
     private data class OsrmTrip(

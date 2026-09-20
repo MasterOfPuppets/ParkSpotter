@@ -22,7 +22,8 @@ class SearchServiceImpl : SearchService {
         radiusMeters: Int,
         selectedTypes: Set<ApiPlaceType>,
         sortMode: SearchSortMode,
-        contexts: Set<com.masterofpuppets.parkspotter.ui.search.SearchContext>
+        contexts: Set<com.masterofpuppets.parkspotter.ui.search.SearchContext>,
+        freeOnly: Boolean
     ): Result<SearchExecutionResult> {
         
         val result = OverpassClient.queryParkingAreas(lat, lon, radiusMeters)
@@ -40,7 +41,7 @@ class SearchServiceImpl : SearchService {
             android.util.Log.d(DIAG_TAG, "=== NEW SEARCH EXECUTION ===")
             android.util.Log.d(DIAG_TAG, "Raw API Overpass Elements: ${elements.size} | Enriched PlaceResults: ${enrichedRawList.size}")
 
-            val filtered = applyLocalFilterInternal(enrichedRawList, selectedTypes, sortMode, contexts)
+            val filtered = applyLocalFilterInternal(enrichedRawList, selectedTypes, sortMode, contexts, freeOnly)
             
             // If sort mode is BEST_ROUTE, calculate optimal OSRM Trip & Road Geometry
             var finalFiltered = filtered
@@ -75,24 +76,26 @@ class SearchServiceImpl : SearchService {
         selectedTypes: Set<ApiPlaceType>,
         sortMode: SearchSortMode,
         contexts: Set<com.masterofpuppets.parkspotter.ui.search.SearchContext>,
-        rawOverpassElements: List<OverpassElement>
+        rawOverpassElements: List<OverpassElement>,
+        freeOnly: Boolean
     ): List<PlaceResult> {
         android.util.Log.d(DIAG_TAG, "=== APPLY LOCAL FILTER (OFFLINE / CACHED) ===")
-        return applyLocalFilterInternal(rawResults, selectedTypes, sortMode, contexts)
+        return applyLocalFilterInternal(rawResults, selectedTypes, sortMode, contexts, freeOnly)
     }
 
     private fun applyLocalFilterInternal(
         rawList: List<PlaceResult>,
         selectedTypes: Set<ApiPlaceType>,
         sortMode: SearchSortMode,
-        contexts: Set<com.masterofpuppets.parkspotter.ui.search.SearchContext>
+        contexts: Set<com.masterofpuppets.parkspotter.ui.search.SearchContext>,
+        freeOnly: Boolean
     ): List<PlaceResult> {
         val selectedTypeKeys = selectedTypes.map { it.key }.toSet()
         val activeContextsStr = if (contexts.isEmpty() || contexts.size == com.masterofpuppets.parkspotter.ui.search.SearchContext.entries.size) "ALL" else contexts.joinToString(", ")
 
         android.util.Log.d(DIAG_TAG, "==========================================================================================")
         android.util.Log.d(DIAG_TAG, ">>> EXECUÇÃO DE FILTRO DE PESQUISA <<<")
-        android.util.Log.d(DIAG_TAG, ">>> FILTRO APLICADO: Contextos = [$activeContextsStr] | Tipos Base = ${selectedTypes.map { it.key }} | Ordenação = $sortMode")
+        android.util.Log.d(DIAG_TAG, ">>> FILTRO APLICADO: Contextos = [$activeContextsStr] | Tipos Base = ${selectedTypes.map { it.key }} | Ordenação = $sortMode | FreeOnly = $freeOnly")
         android.util.Log.d(DIAG_TAG, "==========================================================================================")
 
         // 1. LISTA ORIGINAL COMPLETA (RAW LIST)
@@ -118,12 +121,21 @@ class SearchServiceImpl : SearchService {
             !isAllContexts && contexts.none { ctx -> place.contextMatches.contains(ctx) }
         }
 
-        val sanitized = applySanitization(contextFiltered)
-        val sanitizedDropped = contextFiltered.filter { res -> sanitized.find { it.osmId == res.osmId }?.isSanitized == true }
+        val freeFiltered = if (freeOnly) {
+            contextFiltered.filter { it.isFree }
+        } else {
+            contextFiltered
+        }
+        val excludedByFree = if (freeOnly) {
+            contextFiltered.filter { !it.isFree }
+        } else emptyList()
+
+        val sanitized = applySanitization(freeFiltered)
+        val sanitizedDropped = freeFiltered.filter { res -> sanitized.find { it.osmId == res.osmId }?.isSanitized == true }
         val finalSurvivorsList = sanitized.filter { !it.isSanitized }
 
         // 2. LISTA DOS FILTRADOS / ELIMINADOS
-        val totalExcluded = excludedByType.size + excludedByContext.size + sanitizedDropped.size
+        val totalExcluded = excludedByType.size + excludedByContext.size + excludedByFree.size + sanitizedDropped.size
         android.util.Log.d(DIAG_TAG, "--- [2/3] LISTA DOS FILTRADOS / ELIMINADOS (TOTAL ELIMINADOS: $totalExcluded) ---")
         if (excludedByType.isNotEmpty()) {
             excludedByType.forEach { place ->
@@ -133,6 +145,11 @@ class SearchServiceImpl : SearchService {
         if (excludedByContext.isNotEmpty()) {
             excludedByContext.forEach { place ->
                 android.util.Log.d(DIAG_TAG, "  ELIMINADO [MOTIVO: CONTEXTO] -> ID=${place.osmId} | Type=${place.placeType} | Name='${place.name ?: "Unnamed"}' | PlaceContexts=${place.contextMatches}")
+            }
+        }
+        if (excludedByFree.isNotEmpty()) {
+            excludedByFree.forEach { place ->
+                android.util.Log.d(DIAG_TAG, "  ELIMINADO [MOTIVO: PAGO/NOT FREE] -> ID=${place.osmId} | Name='${place.name ?: "Unnamed"}'")
             }
         }
         if (sanitizedDropped.isNotEmpty()) {
@@ -166,6 +183,8 @@ class SearchServiceImpl : SearchService {
 
     private fun OverpassElement.toPlaceResult(originLat: Double, originLon: Double): PlaceResult {
         val distance = haversineDistanceMeters(originLat, originLon, latitude, longitude)
+        val isPaid = tags["fee"] == "yes" || tags["parking:condition"] in listOf("ticket", "pay", "residents")
+        
         return PlaceResult(
             osmType = type,
             osmId = id,
@@ -176,6 +195,7 @@ class SearchServiceImpl : SearchService {
             tags = tags,
             distanceMeters = distance,
             score = null,
+            isFree = !isPaid
         )
     }
 

@@ -10,6 +10,8 @@ data class OverpassElement(
     val lat: Double? = null,
     val lon: Double? = null,
     val center: OverpassCenter? = null,
+    val geometry: List<OverpassCenter> = emptyList(),
+    val members: List<OverpassMember> = emptyList(),
     val tags: Map<String, String> = emptyMap()
 ) {
     val latitude: Double get() = lat ?: center?.lat ?: 0.0
@@ -18,12 +20,22 @@ data class OverpassElement(
     val placeType: ApiPlaceType get() = ApiPlaceType.from(tags)
 }
 
+fun String.toApiPlaceType(): ApiPlaceType = ApiPlaceType.entries.find { it.key == this } ?: ApiPlaceType.UNKNOWN
+
 enum class ApiPlaceType(val key: String) {
     PARKING("parking"),
     STREET("street"),
     PARK("park"),
     CAMP_SITE("camp_site"),
     UNKNOWN("unknown");
+
+    fun labelResId(): Int = when (this) {
+        PARKING -> com.masterofpuppets.parkspotter.R.string.place_type_parking
+        STREET -> com.masterofpuppets.parkspotter.R.string.place_type_street
+        PARK -> com.masterofpuppets.parkspotter.R.string.place_type_park
+        CAMP_SITE -> com.masterofpuppets.parkspotter.R.string.place_type_camp_site
+        UNKNOWN -> com.masterofpuppets.parkspotter.R.string.place_type_unknown
+    }
 
     companion object {
         private val STREET_HIGHWAY_TYPES = setOf(
@@ -50,4 +62,11 @@ enum class ApiPlaceType(val key: String) {
 data class OverpassCenter(
     val lat: Double = 0.0,
     val lon: Double = 0.0
+)
+
+data class OverpassMember(
+    val type: String = "",
+    val ref: Long = 0L,
+    val role: String = "",
+    val geometry: List<OverpassCenter> = emptyList(),
 )

@@ -12,6 +12,7 @@ import com.masterofpuppets.parkspotter.R
 import com.masterofpuppets.parkspotter.domain.model.PlaceResult
 import com.masterofpuppets.parkspotter.domain.service.SearchService
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 sealed interface SearchUiState {
     data object Idle : SearchUiState
@@ -27,6 +28,7 @@ data class SearchRequestParams(
     val contexts: Set<SearchContext>,
     val sortMode: SearchSortMode,
     val selectedTypes: Set<String>,
+    val freeOnly: Boolean = false,
 )
 
 class SearchViewModel(
@@ -50,6 +52,15 @@ class SearchViewModel(
         }
     }
 
+    fun prepareSearchAt(latitude: Double, longitude: Double, radiusMeters: Int) {
+        initFormState(radiusMeters)
+        searchFormState.locationQuery = String.format(Locale.US, "%.6f, %.6f", latitude, longitude)
+        searchFormState.radiusMeters = radiusMeters
+        isSearchConfigExpanded = true
+        showSearchMap = false
+        selectedResultForMap = null
+    }
+
     var uiState by mutableStateOf<SearchUiState>(SearchUiState.Idle)
         private set
 
@@ -71,11 +82,13 @@ class SearchViewModel(
             selectedTypes = searchFormState.selectedTypes,
             sortMode = searchFormState.sortMode,
             contexts = searchFormState.selectedContexts,
-            rawOverpassElements = current.rawOverpassElements
+            rawOverpassElements = current.rawOverpassElements,
+            freeOnly = searchFormState.freeOnly
         )
         searchSession = current.copy(
             filteredResults = filtered,
             selectedContexts = searchFormState.selectedContexts,
+            freeOnly = searchFormState.freeOnly,
             shouldShowTooManyResultsWarning = filtered.size > normalizedSettings.warnIfResultsAbove,
         )
         searchPageIndex = 0
@@ -96,6 +109,7 @@ class SearchViewModel(
             contexts = searchFormState.selectedContexts,
             sortMode = searchFormState.sortMode,
             selectedTypes = searchFormState.selectedTypes.map { it.key }.toSet(),
+            freeOnly = searchFormState.freeOnly,
         )
 
         if (searchSession != null && requestParams == lastSubmittedParams) {
@@ -116,7 +130,8 @@ class SearchViewModel(
                 radiusMeters = radius,
                 selectedTypes = searchFormState.selectedTypes,
                 sortMode = searchFormState.sortMode,
-                contexts = searchFormState.selectedContexts
+                contexts = searchFormState.selectedContexts,
+                freeOnly = searchFormState.freeOnly
             )
 
             uiState = result.fold(

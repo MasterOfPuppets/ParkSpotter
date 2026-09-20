@@ -12,6 +12,7 @@ data class PlaceResult(
     val tags: Map<String, String>,
     val distanceMeters: Int,
     val score: Float? = null,
+    val isFree: Boolean = true,
     val isSanitized: Boolean = false,
     val sanitizationReason: String? = null,
     val contextMatches: Set<com.masterofpuppets.parkspotter.ui.search.SearchContext> = emptySet(),
