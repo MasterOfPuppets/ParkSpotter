@@ -9,20 +9,36 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.LocalParking
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -52,11 +69,15 @@ import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import kotlin.coroutines.resume
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun HomeMapScreen(
     modifier: Modifier = Modifier,
     snackbarHostState: SnackbarHostState,
+    onOpenDrawer: () -> Unit = {},
+    onNavigateToParking: () -> Unit = {},
+    onNavigateToZone: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -73,9 +94,12 @@ fun HomeMapScreen(
 
     val permissionMsg = stringResource(R.string.home_location_permission_required)
     val unavailableMsg = stringResource(R.string.home_location_unavailable)
+    val currentLocationTitle = stringResource(R.string.home_current_location_title)
     val refreshLocationDesc = stringResource(R.string.home_refresh_location)
     val zoomInDesc = stringResource(R.string.home_zoom_in)
     val zoomOutDesc = stringResource(R.string.home_zoom_out)
+    val searchSpotsLabel = stringResource(R.string.home_action_search_spots)
+    val exploreZonesLabel = stringResource(R.string.home_action_explore_zones)
 
     fun zoomMapAtCenter(zoomIn: Boolean) {
         val mapView = mapViewRef ?: return
@@ -173,44 +197,47 @@ fun HomeMapScreen(
                         val marker = Marker(mapView).apply {
                             id = "current_location"
                             position = point
-                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                            title = context.getString(R.string.home_current_location_title)
-                            icon = ContextCompat.getDrawable(context, R.drawable.ic_home_pin_marker_filled)?.mutate()?.apply {
+                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                            title = currentLocationTitle
+                            icon = ContextCompat.getDrawable(context, R.drawable.ic_my_location_marker)?.mutate()?.apply {
                                 setTint(ContextCompat.getColor(context, R.color.primary_dark))
                             }
                         }
                         mapView.overlays.add(marker)
                     } else {
                         existingMarker.position = point
+                        existingMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                     }
                     mapView.invalidate()
                 }
             },
         )
 
-        Row(
+        FloatingActionButton(
+            onClick = onOpenDrawer,
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                .align(Alignment.TopStart)
+                .padding(start = 16.dp, top = 16.dp),
+            shape = CircleShape,
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.Menu,
+                contentDescription = stringResource(R.string.content_desc_open_menu),
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = 170.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp,
-                shadowElevation = 4.dp,
-            ) {
-                IconButton(onClick = { zoomMapAtCenter(zoomIn = true) }) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = zoomInDesc,
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-            }
-
-            Surface(
-                shape = RoundedCornerShape(16.dp),
+                shape = CircleShape,
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 6.dp,
                 shadowElevation = 4.dp,
@@ -230,11 +257,72 @@ fun HomeMapScreen(
                 tonalElevation = 6.dp,
                 shadowElevation = 4.dp,
             ) {
-                IconButton(onClick = { zoomMapAtCenter(zoomIn = false) }) {
-                    Icon(
-                        imageVector = Icons.Default.Remove,
-                        contentDescription = zoomOutDesc,
-                        tint = MaterialTheme.colorScheme.onSurface,
+                Column {
+                    IconButton(onClick = { zoomMapAtCenter(zoomIn = true) }) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = zoomInDesc,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    IconButton(onClick = { zoomMapAtCenter(zoomIn = false) }) {
+                        Icon(
+                            imageVector = Icons.Default.Remove,
+                            contentDescription = zoomOutDesc,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(
+                    onClick = onNavigateToParking,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                    ),
+                ) {
+                    Icon(imageVector = Icons.Default.LocalParking, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = searchSpotsLabel,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+
+                FilledTonalButton(
+                    onClick = onNavigateToZone,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Icon(imageVector = Icons.Default.Explore, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = exploreZonesLabel,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
             }
@@ -261,12 +349,17 @@ private fun hasLocationPermission(context: Context): Boolean {
 }
 
 private fun getBestLastKnownLocation(context: Context): Location? {
+    if (!hasLocationPermission(context)) return null
     val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
         ?: return null
     val providers = locationManager.getProviders(true)
     return providers
         .mapNotNull { provider ->
-            runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull()
+            try {
+                locationManager.getLastKnownLocation(provider)
+            } catch (_: SecurityException) {
+                null
+            }
         }
         .maxByOrNull { it.time }
 }
@@ -275,7 +368,7 @@ private suspend fun fetchCurrentLocationWithRetry(context: Context): Location? {
     repeat(3) {
         val location = requestCurrentLocation(context)
         if (location != null) return location
-        delay(1200)
+        delay(1200.milliseconds)
     }
     return getBestLastKnownLocation(context)
 }
@@ -305,12 +398,13 @@ private suspend fun requestProviderLocation(
     context: Context,
     locationManager: LocationManager,
     provider: String,
-): Location? = withTimeoutOrNull(6000) {
+): Location? = withTimeoutOrNull(6000.milliseconds) {
+    if (!hasLocationPermission(context)) return@withTimeoutOrNull null
     suspendCancellableCoroutine { continuation ->
         val cancellationSignal = CancellationSignal()
         continuation.invokeOnCancellation { cancellationSignal.cancel() }
 
-        runCatching {
+        try {
             LocationManagerCompat.getCurrentLocation(
                 locationManager,
                 provider,
@@ -319,7 +413,7 @@ private suspend fun requestProviderLocation(
             ) { location ->
                 if (continuation.isActive) continuation.resume(location)
             }
-        }.onFailure {
+        } catch (_: SecurityException) {
             if (continuation.isActive) continuation.resume(null)
         }
     }

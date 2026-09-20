@@ -219,4 +219,7 @@
     <string name="spike_idle">Press the button to fetch results from OpenStreetMap.</string>
     <string name="spike_error">Error: %s</string>
     <string name="spike_results_count">%d results found</string>
+
+    <string name="home_action_search_spots">Search spots here</string>
+    <string name="home_action_explore_zones">Plan / explore zones</string>
 </resources>

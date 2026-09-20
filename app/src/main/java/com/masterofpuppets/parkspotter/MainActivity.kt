@@ -2,25 +2,20 @@ package com.masterofpuppets.parkspotter
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.core.content.edit
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -32,7 +27,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
-import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,9 +34,9 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -51,19 +45,20 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.masterofpuppets.parkspotter.ui.theme.ParkSpotterTheme
-import com.masterofpuppets.parkspotter.ui.home.HomeMapScreen
-import com.masterofpuppets.parkspotter.ui.search.SearchScreen
-import com.masterofpuppets.parkspotter.ui.search.SearchResultsMapScreen
-import com.masterofpuppets.parkspotter.ui.search.SearchUiSettings
+import androidx.core.content.edit
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.masterofpuppets.parkspotter.domain.model.PlaceResult
+import com.masterofpuppets.parkspotter.ui.about.AboutScreen
+import com.masterofpuppets.parkspotter.ui.home.HomeMapScreen
+import com.masterofpuppets.parkspotter.ui.search.SearchResultsMapScreen
+import com.masterofpuppets.parkspotter.ui.search.SearchScreen
+import com.masterofpuppets.parkspotter.ui.search.SearchUiSettings
 import com.masterofpuppets.parkspotter.ui.search.SearchViewModel
 import com.masterofpuppets.parkspotter.ui.settings.SettingsScreen
 import com.masterofpuppets.parkspotter.ui.settings.VehicleManageViewModel
-import com.masterofpuppets.parkspotter.ui.about.AboutScreen
+import com.masterofpuppets.parkspotter.ui.theme.ParkSpotterTheme
 import com.masterofpuppets.parkspotter.ui.zone.ZoneSearchScreen
 import com.masterofpuppets.parkspotter.ui.zone.ZoneSearchViewModel
-import com.masterofpuppets.parkspotter.domain.model.PlaceResult
 import kotlinx.coroutines.launch
 
 private const val LEGAL_PREFS_NAME = "legal_notice_prefs"
@@ -87,7 +82,7 @@ class MainActivity : ComponentActivity() {
         val dontShowAgain = prefs.getBoolean(LEGAL_DONT_SHOW_AGAIN_KEY, false)
         val now = System.currentTimeMillis()
         val isIntervalPassed = lastShownAt == 0L || now - lastShownAt >= LEGAL_SHOW_INTERVAL_MS
-        
+
         val shouldShowLegalDialog = isIntervalPassed && !dontShowAgain
         val shouldShowLegalSnackbar = isIntervalPassed && dontShowAgain
 
@@ -110,7 +105,7 @@ class MainActivity : ComponentActivity() {
                     showLegalSnackbarOnStart = shouldShowLegalSnackbar,
                     initialSearchSettings = initialSearchSettings,
                     onLegalDismissed = { checkedDontShowAgain ->
-                        prefs.edit { 
+                        prefs.edit {
                             putLong(LEGAL_LAST_SHOWN_KEY, System.currentTimeMillis())
                             putBoolean(LEGAL_DONT_SHOW_AGAIN_KEY, checkedDontShowAgain)
                         }
@@ -187,9 +182,9 @@ private fun ParkSpotterApp(
     val currentScreen = backStack.last()
     var showLegalDialog by rememberSaveable { mutableStateOf(showLegalOnStart) }
     var searchSettings by rememberSaveable(stateSaver = searchUiSettingsSaver) { mutableStateOf(initialSearchSettings) }
-    
+
     val app = LocalContext.current.applicationContext as ParkSpotterApplication
-    
+
     val searchViewModel: SearchViewModel = viewModel(
         factory = SearchViewModel.provideFactory(app.searchService)
     )
@@ -201,12 +196,10 @@ private fun ParkSpotterApp(
     val zoneSearchViewModel: ZoneSearchViewModel = viewModel(
         factory = ZoneSearchViewModel.provideFactory(app.zoneClassificationService)
     )
-    
-    // As search states are now inside ViewModel, we just access them directly when needed
+
     val currentSearchSession = searchViewModel.searchSession
     val showSearchMap = searchViewModel.showSearchMap
     val selectedResultForMap = searchViewModel.selectedResultForMap
-    val isSearchConfigExpanded = searchViewModel.isSearchConfigExpanded
     val searchPageIndex = searchViewModel.searchPageIndex
 
     fun navigateTo(screen: AppScreen) {
@@ -216,7 +209,6 @@ private fun ParkSpotterApp(
         }
     }
 
-    // Always consume back: close drawer, pop stack, or do nothing on Home.
     BackHandler(enabled = true) {
         when {
             drawerState.isOpen -> scope.launch { drawerState.close() }
@@ -267,12 +259,15 @@ private fun ParkSpotterApp(
                     AppScreen.Home -> HomeMapScreen(
                         modifier = Modifier.fillMaxSize(),
                         snackbarHostState = snackbarHostState,
+                        onOpenDrawer = { scope.launch { drawerState.open() } },
+                        onNavigateToParking = { navigateTo(AppScreen.ParkingSearch) },
+                        onNavigateToZone = { navigateTo(AppScreen.ZoneSearch) },
                     )
                     AppScreen.ParkingSearch -> if (showSearchMap && currentSearchSession != null) {
                         val pageSize = searchSettings.resultsPageSize
                         val singleResult = searchViewModel.selectedResultForMap
                         val allResults = currentSearchSession.filteredResults
-                        
+
                         val (mapResults, currentPageDisplay, totalPagesDisplay) = if (singleResult != null) {
                             val globalIndex = allResults.indexOf(singleResult)
                             val displayList: List<Pair<Int, PlaceResult>> = listOf(Pair(globalIndex + 1, singleResult))
@@ -325,7 +320,7 @@ private fun ParkSpotterApp(
                                     if (searchPageIndex > 0) searchViewModel.searchPageIndex--
                                 }
                             },
-                            onBack = { 
+                            onBack = {
                                 searchViewModel.showSearchMap = false
                                 searchViewModel.selectedResultForMap = null
                             },
@@ -372,22 +367,6 @@ private fun ParkSpotterApp(
                         title = stringResource(currentScreen.titleRes),
                         description = stringResource(R.string.placeholder_screen_content),
                     )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp, end = 8.dp),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                        Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = stringResource(R.string.content_desc_open_menu),
-                            tint = Color.DarkGray,
-                        )
-                    }
                 }
             }
         }
