@@ -1,5 +1,6 @@
 package com.masterofpuppets.parkspotter.domain.service.zone
 
+import android.util.Log
 import com.masterofpuppets.parkspotter.domain.model.GeoCoordinate
 import com.masterofpuppets.parkspotter.domain.model.ZoneCategory
 import com.masterofpuppets.parkspotter.domain.model.ZoneFactor
@@ -10,6 +11,8 @@ import com.masterofpuppets.parkspotter.domain.model.ZoneSearchResult
 import com.masterofpuppets.parkspotter.domain.service.routing.OsrmRoutingClient
 import com.masterofpuppets.parkspotter.spike.OverpassClient
 import com.masterofpuppets.parkspotter.spike.OverpassElement
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -17,6 +20,8 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 class ZoneClassificationServiceImpl : ZoneClassificationService {
+
+    private val zoneCache = ConcurrentHashMap<String, ZoneSearchResult>()
 
     override suspend fun classifyZones(
         latitude: Double,
@@ -27,6 +32,21 @@ class ZoneClassificationServiceImpl : ZoneClassificationService {
     ): Result<ZoneSearchResult> {
         if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) {
             return Result.failure(IllegalArgumentException("Invalid search coordinates"))
+        }
+
+        val cacheKey = String.format(
+            Locale.US,
+            "%.4f_%.4f_%d_%.4f_%.4f",
+            latitude,
+            longitude,
+            config.analysisRadiusMeters,
+            originLatitude ?: latitude,
+            originLongitude ?: longitude
+        )
+
+        zoneCache[cacheKey]?.let { cached ->
+            Log.d("ParkSpotter", "ZoneClassificationServiceImpl: Returning cached zone result for key=$cacheKey")
+            return Result.success(cached)
         }
 
         val destinationElements = OverpassClient.queryZoneClassificationData(
@@ -49,6 +69,7 @@ class ZoneClassificationServiceImpl : ZoneClassificationService {
             config = config,
         )
         val result = destinationResult.copy(routeAlternatives = routeAlternatives)
+        zoneCache[cacheKey] = result
         return Result.success(result)
     }
 

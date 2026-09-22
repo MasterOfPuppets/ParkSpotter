@@ -10,6 +10,7 @@ import okhttp3.Request
 import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlin.math.cos
 
 object OverpassClient {
 
@@ -81,23 +82,29 @@ object OverpassClient {
         radiusMeters: Int,
     ): Result<List<OverpassElement>> = withContext(Dispatchers.IO) {
         try {
-            val formattedLat = String.format(Locale.US, "%.6f", lat)
-            val formattedLon = String.format(Locale.US, "%.6f", lon)
+            val latDelta = (radiusMeters.toDouble() / 111320.0)
+            val lonDelta = (radiusMeters.toDouble() / (111320.0 * cos(Math.toRadians(lat)).coerceAtLeast(0.001)))
+            val south = String.format(Locale.US, "%.6f", lat - latDelta)
+            val north = String.format(Locale.US, "%.6f", lat + latDelta)
+            val west = String.format(Locale.US, "%.6f", lon - lonDelta)
+            val east = String.format(Locale.US, "%.6f", lon + lonDelta)
+
             val query = """
-                [out:json][timeout:25];
+                [out:json][timeout:25][bbox:$south,$west,$north,$east];
                 (
-                  way["landuse"~"residential|industrial|commercial"](around:$radiusMeters,$formattedLat,$formattedLon);
-                  relation["landuse"~"residential|industrial|commercial"](around:$radiusMeters,$formattedLat,$formattedLon);
+                  way["landuse"~"^(residential|industrial|commercial)$"];
+                  relation["landuse"~"^(residential|industrial|commercial)$"];
                 )->.zones;
                 (
-                  way["building"~"apartments|house|detached"](around:$radiusMeters,$formattedLat,$formattedLon);
-                  way["highway"~"residential|living_street|service|motorway|trunk|primary|tertiary|unclassified"](around:$radiusMeters,$formattedLat,$formattedLon);
-                  node["amenity"~"parking|nightclub|bar|pub"](around:$radiusMeters,$formattedLat,$formattedLon);
-                  node["barrier"="gate"](around:$radiusMeters,$formattedLat,$formattedLon);
-                  node["place"~"neighbourhood|suburb"](around:$radiusMeters,$formattedLat,$formattedLon);
+                  way["building"~"^(apartments|house|detached|semidetached_house)$"];
+                  way["highway"~"^(residential|living_street|service|motorway|trunk|primary|tertiary|unclassified)$"];
+                  node["amenity"~"^(parking|nightclub|bar|pub)$"];
+                  way["amenity"="parking"];
+                  node["barrier"="gate"];
+                  node["place"~"^(neighbourhood|suburb)$"];
                 )->.features;
-                .zones out center geom;
-                .features out tags center;
+                .zones out center geom qt;
+                .features out tags center qt;
             """.trimIndent()
 
             val json = executeOverpassQuery(query)
