@@ -1,6 +1,7 @@
 package com.masterofpuppets.parkspotter.ui.zone
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -41,6 +42,7 @@ class ZoneSearchViewModel(
         originLongitude: Double?,
         config: ZoneClassificationConfig = ZoneClassificationConfig(),
     ) {
+        Log.d("ParkSpotter", "ZoneSearchViewModel.search: Starting zone classification -> target=($latitude, $longitude), origin=($originLatitude, $originLongitude), radius=${config.analysisRadiusMeters}")
         uiState = ZoneSearchUiState.Loading
         recommendations = emptyList()
         routeAlternatives = emptyList()
@@ -53,11 +55,19 @@ class ZoneSearchViewModel(
                 config = config,
             ).fold(
                 onSuccess = { result ->
+                    Log.d("ParkSpotter", "ZoneSearchViewModel.search SUCCESS: ${result.recommendations.size} recommendations, ${result.routeAlternatives.size} route alternatives")
+                    result.recommendations.forEachIndexed { index, rec ->
+                        Log.d("ParkSpotter", "  [Rec #$index] ${rec.name} (${rec.category}) -> target=(${rec.targetCoordinate.latitude}, ${rec.targetCoordinate.longitude}), score=${rec.score}")
+                    }
+                    result.routeAlternatives.forEachIndexed { index, rec ->
+                        Log.d("ParkSpotter", "  [RouteAlt #$index] ${rec.name} -> target=(${rec.targetCoordinate.latitude}, ${rec.targetCoordinate.longitude})")
+                    }
                     recommendations = result.recommendations
                     routeAlternatives = result.routeAlternatives
                     uiState = ZoneSearchUiState.Success(result.sourceElementCount)
                 },
                 onFailure = { error ->
+                    Log.e("ParkSpotter", "ZoneSearchViewModel.search FAILURE: ${error.message}", error)
                     val code = error.message?.substringAfter("HTTP_") ?: ""
                     val displayError = if (code.isNotBlank() && code.all { it.isDigit() }) {
                         context.getString(R.string.search_error_api_failed, code)

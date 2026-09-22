@@ -12,6 +12,7 @@ import com.masterofpuppets.parkspotter.spike.OverpassClient
 import com.masterofpuppets.parkspotter.spike.OverpassElement
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -34,7 +35,12 @@ class ZoneClassificationServiceImpl : ZoneClassificationService {
             radiusMeters = config.analysisRadiusMeters,
         ).getOrElse { error -> return Result.failure(error) }
 
-        val destinationResult = classifyElements(destinationElements, config)
+        val destinationResult = classifyElements(
+            elements = destinationElements,
+            config = config,
+            destinationLatitude = latitude,
+            destinationLongitude = longitude,
+        )
         val routeAlternatives = findRouteAlternatives(
             originLatitude = originLatitude,
             originLongitude = originLongitude,
@@ -49,10 +55,22 @@ class ZoneClassificationServiceImpl : ZoneClassificationService {
     internal fun classifyElements(
         elements: List<OverpassElement>,
         config: ZoneClassificationConfig = ZoneClassificationConfig(),
+        destinationLatitude: Double? = null,
+        destinationLongitude: Double? = null,
     ): ZoneSearchResult {
+        val dest = if (destinationLatitude != null && destinationLongitude != null) {
+            GeoCoordinate(destinationLatitude, destinationLongitude)
+        } else null
+
         val candidates = elements.mapNotNull { element ->
-            classifyCandidate(element, elements, config)
+            val zone = classifyCandidate(element, elements, config)
                 ?.takeUnless { it.category == ZoneCategory.SERVICE_24_7 }
+            if (zone != null && dest != null) {
+                val dist = distanceMeters(zone.targetCoordinate, dest).roundToInt()
+                zone.copy(distanceMeters = dist)
+            } else {
+                zone
+            }
         }
         return ZoneSearchResult(
             recommendations = selectDiverseResults(candidates, config),
@@ -93,13 +111,16 @@ class ZoneClassificationServiceImpl : ZoneClassificationService {
         ).getOrElse { return emptyList() }
         val destination = GeoCoordinate(destinationLatitude, destinationLongitude)
         return elements.mapNotNull { element ->
-            classifyCandidate(element, elements, config)
+            val zone = classifyCandidate(element, elements, config)
                 ?.takeIf { it.category == ZoneCategory.SERVICE_24_7 }
+            if (zone != null) {
+                val dist = distanceMeters(zone.targetCoordinate, destination).roundToInt()
+                zone.copy(distanceMeters = dist)
+            } else null
         }.distinctBy { it.osmReference }
             .sortedWith(
-                compareBy<ZoneRecommendation> {
-                    distanceMeters(it.targetCoordinate, destination)
-                }.thenByDescending { it.score },
+                compareBy<ZoneRecommendation> { it.distanceMeters }
+                    .thenByDescending { it.score },
             )
             .take(config.routeAlternativesMaximumResults)
     }
@@ -423,10 +444,12 @@ class ZoneClassificationServiceImpl : ZoneClassificationService {
     ): List<ZoneRecommendation> {
         val selected = mutableListOf<ZoneRecommendation>()
         val categoryCounts = mutableMapOf<ZoneCategory, Int>()
-        for (candidate in candidates.sortedWith(
-            compareByDescending<ZoneRecommendation> { it.score }
+        val sortedCandidates = candidates.sortedWith(
+            compareBy<ZoneRecommendation> { it.distanceMeters }
+                .thenByDescending { it.score }
                 .thenByDescending { it.confidence },
-        )) {
+        )
+        for (candidate in sortedCandidates) {
             if (selected.size >= config.maxRecommendations) break
             if ((categoryCounts[candidate.category] ?: 0) >= config.maxRecommendationsPerCategory) continue
             if (selected.any {

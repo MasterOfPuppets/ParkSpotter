@@ -1,6 +1,11 @@
 package com.masterofpuppets.parkspotter
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -45,6 +50,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.masterofpuppets.parkspotter.domain.model.PlaceResult
@@ -53,6 +59,7 @@ import com.masterofpuppets.parkspotter.ui.home.HomeMapScreen
 import com.masterofpuppets.parkspotter.ui.search.SearchResultsMapScreen
 import com.masterofpuppets.parkspotter.ui.search.SearchScreen
 import com.masterofpuppets.parkspotter.ui.search.SearchUiSettings
+import com.masterofpuppets.parkspotter.ui.search.SearchUiState
 import com.masterofpuppets.parkspotter.ui.search.SearchViewModel
 import com.masterofpuppets.parkspotter.ui.settings.SettingsScreen
 import com.masterofpuppets.parkspotter.ui.settings.VehicleManageViewModel
@@ -60,6 +67,7 @@ import com.masterofpuppets.parkspotter.ui.theme.ParkSpotterTheme
 import com.masterofpuppets.parkspotter.ui.zone.ZoneSearchScreen
 import com.masterofpuppets.parkspotter.ui.zone.ZoneSearchViewModel
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 private const val LEGAL_PREFS_NAME = "legal_notice_prefs"
 private const val LEGAL_LAST_SHOWN_KEY = "legal_last_shown_at"
@@ -183,7 +191,8 @@ private fun ParkSpotterApp(
     var showLegalDialog by rememberSaveable { mutableStateOf(showLegalOnStart) }
     var searchSettings by rememberSaveable(stateSaver = searchUiSettingsSaver) { mutableStateOf(initialSearchSettings) }
 
-    val app = LocalContext.current.applicationContext as ParkSpotterApplication
+    val context = LocalContext.current
+    val app = context.applicationContext as ParkSpotterApplication
 
     val searchViewModel: SearchViewModel = viewModel(
         factory = SearchViewModel.provideFactory(app.searchService)
@@ -198,9 +207,8 @@ private fun ParkSpotterApp(
     )
 
     val currentSearchSession = searchViewModel.searchSession
-    val showSearchMap = searchViewModel.showSearchMap
-    val selectedResultForMap = searchViewModel.selectedResultForMap
     val searchPageIndex = searchViewModel.searchPageIndex
+    var activeZoneTarget by remember { mutableStateOf<Pair<Double, Double>?>(null) }
 
     fun navigateTo(screen: AppScreen) {
         if (backStack.last() != screen) backStack.add(screen)
@@ -212,9 +220,13 @@ private fun ParkSpotterApp(
     BackHandler(enabled = true) {
         when {
             drawerState.isOpen -> scope.launch { drawerState.close() }
-            currentScreen == AppScreen.ParkingSearch && showSearchMap -> {
-                searchViewModel.showSearchMap = false
+            currentScreen == AppScreen.ParkingSearch -> {
                 searchViewModel.selectedResultForMap = null
+                if (backStack.size > 1) {
+                    backStack.removeAt(backStack.lastIndex)
+                } else {
+                    navigateTo(AppScreen.Home)
+                }
             }
             backStack.size > 1 -> backStack.removeAt(backStack.lastIndex)
             else -> Unit
@@ -236,6 +248,31 @@ private fun ParkSpotterApp(
                         label = { Text(stringResource(screen.titleRes)) },
                         selected = currentScreen == screen,
                         onClick = {
+                            if (screen == AppScreen.ParkingSearch && searchViewModel.searchSession == null) {
+                                val locManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                                val fineGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                val coarseGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                val liveLoc = if (fineGranted || coarseGranted) {
+                                    locManager?.getProviders(true)?.mapNotNull { runCatching { locManager.getLastKnownLocation(it) }.getOrNull() }?.maxByOrNull { it.time }
+                                } else null
+
+                                val lat = liveLoc?.latitude ?: 38.696728
+                                val lon = liveLoc?.longitude ?: -9.364814
+                                val defaultRadius = searchSettings.minRadiusMeters.coerceIn(
+                                    searchSettings.minRadiusMeters,
+                                    searchSettings.maxRadiusMeters
+                                )
+                                searchViewModel.initFormState(defaultRadius)
+                                searchViewModel.searchFormState.locationQuery = String.format(Locale.US, "%.6f, %.6f", lat, lon)
+                                searchViewModel.showSearchMap = true
+                                searchViewModel.selectedResultForMap = null
+                                searchViewModel.executeSearch(
+                                    context = context,
+                                    radius = searchViewModel.searchFormState.radiusMeters,
+                                    coords = lat to lon,
+                                    normalizedSettings = searchSettings,
+                                )
+                            }
                             navigateTo(screen)
                             scope.launch { drawerState.close() }
                         },
@@ -260,91 +297,180 @@ private fun ParkSpotterApp(
                         modifier = Modifier.fillMaxSize(),
                         snackbarHostState = snackbarHostState,
                         onOpenDrawer = { scope.launch { drawerState.open() } },
-                        onNavigateToParking = { navigateTo(AppScreen.ParkingSearch) },
-                        onNavigateToZone = { navigateTo(AppScreen.ZoneSearch) },
-                    )
-                    AppScreen.ParkingSearch -> if (showSearchMap && currentSearchSession != null) {
-                        val pageSize = searchSettings.resultsPageSize
-                        val singleResult = searchViewModel.selectedResultForMap
-                        val allResults = currentSearchSession.filteredResults
+                        onNavigateToParking = { lat, lon ->
+                            Log.d("ParkSpotter", "MainActivity: onNavigateToParking called with lat=$lat, lon=$lon")
+                            val defaultRadius = searchSettings.minRadiusMeters.coerceIn(
+                                searchSettings.minRadiusMeters,
+                                searchSettings.maxRadiusMeters
+                            )
+                            searchViewModel.initFormState(defaultRadius)
+                            searchViewModel.searchFormState.locationQuery = String.format(Locale.US, "%.6f, %.6f", lat, lon)
+                            searchViewModel.showSearchMap = true
+                            searchViewModel.selectedResultForMap = null
+                            searchViewModel.executeSearch(
+                                context = context,
+                                radius = searchViewModel.searchFormState.radiusMeters,
+                                coords = lat to lon,
+                                normalizedSettings = searchSettings,
+                            )
+                            navigateTo(AppScreen.ParkingSearch)
+                        },
+                        onNavigateToZone = { lat, lon ->
+                            activeZoneTarget = lat to lon
+                            val locManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                            val fineGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                            val coarseGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                            val liveLoc = if (fineGranted || coarseGranted) {
+                                locManager?.getProviders(true)?.mapNotNull { runCatching { locManager.getLastKnownLocation(it) }.getOrNull() }?.maxByOrNull { it.time }
+                            } else null
 
-                        val (mapResults, currentPageDisplay, totalPagesDisplay) = if (singleResult != null) {
-                            val globalIndex = allResults.indexOf(singleResult)
-                            val displayList: List<Pair<Int, PlaceResult>> = listOf(Pair(globalIndex + 1, singleResult))
-                            Triple<List<Pair<Int, PlaceResult>>, Int, Int>(displayList, globalIndex + 1, allResults.size)
-                        } else {
-                            val totalPages = (allResults.size + pageSize - 1) / pageSize
-                            val pagedList: List<Pair<Int, PlaceResult>> = allResults
-                                .mapIndexed { index, result -> Pair(index + 1, result) }
-                                .drop(searchPageIndex * pageSize)
-                                .take(pageSize)
-                            Triple<List<Pair<Int, PlaceResult>>, Int, Int>(pagedList, searchPageIndex + 1, totalPages)
-                        }
+                            Log.d("ParkSpotter", "MainActivity: onNavigateToZone called with target lat=$lat, lon=$lon | liveLoc=(${liveLoc?.latitude}, ${liveLoc?.longitude})")
+
+                            zoneSearchViewModel.search(
+                                context = context,
+                                latitude = lat,
+                                longitude = lon,
+                                originLatitude = liveLoc?.latitude ?: lat,
+                                originLongitude = liveLoc?.longitude ?: lon,
+                            )
+                            navigateTo(AppScreen.ZoneSearch)
+                        },
+                    )
+                    AppScreen.ParkingSearch -> {
+                        searchViewModel.initFormState(searchSettings.minRadiusMeters)
+                        val pageSize = searchSettings.resultsPageSize
+                        val allResults = currentSearchSession?.filteredResults ?: emptyList()
+                        val totalPages = ((allResults.size + pageSize - 1) / pageSize).coerceAtLeast(1)
+                        val pagedList: List<Pair<Int, PlaceResult>> = allResults
+                            .mapIndexed { index, result -> Pair(index + 1, result) }
+                            .drop(searchPageIndex * pageSize)
+                            .take(pageSize)
 
                         SearchResultsMapScreen(
                             modifier = Modifier.fillMaxSize(),
-                            originLat = currentSearchSession.originLat,
-                            originLon = currentSearchSession.originLon,
-                            resultsWithIndex = mapResults,
+                            originLat = currentSearchSession?.originLat ?: 0.0,
+                            originLon = currentSearchSession?.originLon ?: 0.0,
+                            radiusMeters = currentSearchSession?.radiusMeters ?: searchViewModel.searchFormState.radiusMeters,
+                            resultsWithIndex = pagedList,
                             allResults = allResults,
-                            routeGeometry = currentSearchSession.routeGeometry,
-                            currentPage = currentPageDisplay,
-                            totalPages = totalPagesDisplay,
-                            isSingleResultMode = singleResult != null,
+                            routeGeometry = currentSearchSession?.routeGeometry ?: emptyList(),
+                            currentPage = (searchPageIndex + 1).coerceAtMost(totalPages),
+                            totalPages = totalPages,
+                            isLoading = searchViewModel.uiState is SearchUiState.Loading,
+                            errorMessage = (searchViewModel.uiState as? SearchUiState.Error)?.message,
+                            selectedResult = searchViewModel.selectedResultForMap,
                             navSettings = searchSettings,
+                            formState = searchViewModel.searchFormState,
                             onSelectResult = { selectedPlace ->
                                 searchViewModel.selectedResultForMap = selectedPlace
                             },
                             onNextPage = {
-                                if (singleResult != null) {
-                                    val currentIndex = allResults.indexOf(singleResult)
-                                    if (currentIndex < allResults.size - 1) {
-                                        val nextResult = allResults[currentIndex + 1]
-                                        searchViewModel.selectedResultForMap = nextResult
-                                        searchViewModel.searchPageIndex = (currentIndex + 1) / pageSize
-                                    }
-                                } else {
-                                    val totalPages = (allResults.size + pageSize - 1) / pageSize
-                                    if (searchPageIndex < totalPages - 1) searchViewModel.searchPageIndex++
+                                if (searchPageIndex < totalPages - 1) {
+                                    searchViewModel.searchPageIndex++
+                                    searchViewModel.selectedResultForMap = null
                                 }
                             },
                             onPreviousPage = {
-                                if (singleResult != null) {
-                                    val currentIndex = allResults.indexOf(singleResult)
-                                    if (currentIndex > 0) {
-                                        val prevResult = allResults[currentIndex - 1]
-                                        searchViewModel.selectedResultForMap = prevResult
-                                        searchViewModel.searchPageIndex = (currentIndex - 1) / pageSize
-                                    }
-                                } else {
-                                    if (searchPageIndex > 0) searchViewModel.searchPageIndex--
+                                if (searchPageIndex > 0) {
+                                    searchViewModel.searchPageIndex--
+                                    searchViewModel.selectedResultForMap = null
                                 }
                             },
                             onBack = {
                                 searchViewModel.showSearchMap = false
                                 searchViewModel.selectedResultForMap = null
+                                if (backStack.size > 1) {
+                                    backStack.removeAt(backStack.lastIndex)
+                                } else {
+                                    navigateTo(AppScreen.Home)
+                                }
                             },
-                        )
-                    } else {
-                        SearchScreen(
-                            modifier = Modifier.fillMaxSize(),
-                            viewModel = searchViewModel,
-                            settings = searchSettings,
-                            onOpenMap = { if (currentSearchSession != null) searchViewModel.showSearchMap = true },
-                            snackbarHostState = snackbarHostState,
+                            onApplyFilters = { newRadius, newLat, newLon ->
+                                val session = currentSearchSession
+                                val locationChanged = session == null || session.originLat != newLat || session.originLon != newLon
+                                val radiusChanged = session == null || session.radiusMeters != newRadius
+                                if (locationChanged || radiusChanged) {
+                                    searchViewModel.searchFormState.locationQuery = String.format(
+                                        Locale.US, "%.6f, %.6f", newLat, newLon)
+                                    searchViewModel.searchFormState.radiusMeters = newRadius
+                                    searchViewModel.executeSearch(
+                                        context = context,
+                                        radius = newRadius,
+                                        coords = newLat to newLon,
+                                        normalizedSettings = searchSettings
+                                    )
+                                } else {
+                                    searchViewModel.applyLocalFilter(searchSettings)
+                                }
+                            },
+                            onRetrySearch = {
+                                val lastParams = searchViewModel.lastSubmittedParams
+                                val session = currentSearchSession
+                                val coords = if (lastParams != null) {
+                                    lastParams.originLat to lastParams.originLon
+                                } else if (session != null) {
+                                    session.originLat to session.originLon
+                                } else {
+                                    38.696728 to -9.364814
+                                }
+                                Log.d("ParkSpotter", "MainActivity: Retrying search at coords=(${coords.first}, ${coords.second})")
+                                searchViewModel.executeSearch(
+                                    context = context,
+                                    radius = searchViewModel.searchFormState.radiusMeters,
+                                    coords = coords,
+                                    normalizedSettings = searchSettings
+                                )
+                            }
                         )
                     }
                     AppScreen.ZoneSearch -> ZoneSearchScreen(
                         modifier = Modifier.fillMaxSize(),
                         viewModel = zoneSearchViewModel,
+                        targetLat = activeZoneTarget?.first ?: 38.696728,
+                        targetLon = activeZoneTarget?.second ?: -9.364814,
                         navSettings = searchSettings,
                         snackbarHostState = snackbarHostState,
+                        onBack = {
+                            if (backStack.size > 1) {
+                                backStack.removeAt(backStack.lastIndex)
+                            } else {
+                                navigateTo(AppScreen.Home)
+                            }
+                        },
+                        onChangeLocation = { lat, lon ->
+                            activeZoneTarget = lat to lon
+                            val locManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                            val fineGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                            val coarseGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                            val liveLoc = if (fineGranted || coarseGranted) {
+                                locManager?.getProviders(true)?.mapNotNull { runCatching { locManager.getLastKnownLocation(it) }.getOrNull() }?.maxByOrNull { it.time }
+                            } else null
+
+                            zoneSearchViewModel.search(
+                                context = context,
+                                latitude = lat,
+                                longitude = lon,
+                                originLatitude = liveLoc?.latitude ?: lat,
+                                originLongitude = liveLoc?.longitude ?: lon,
+                            )
+                        },
                         onSearchParking = { latitude, longitude, radius ->
+                            Log.d("ParkSpotter", "MainActivity: onSearchParking (from Zone Recommendation) called with lat=$latitude, lon=$longitude, radius=$radius")
                             val boundedRadius = radius.coerceIn(
                                 searchSettings.minRadiusMeters,
                                 searchSettings.maxRadiusMeters,
                             )
-                            searchViewModel.prepareSearchAt(latitude, longitude, boundedRadius)
+                            searchViewModel.initFormState(boundedRadius)
+                            searchViewModel.searchFormState.radiusMeters = boundedRadius
+                            searchViewModel.searchFormState.locationQuery = String.format(Locale.US, "%.6f, %.6f", latitude, longitude)
+                            searchViewModel.showSearchMap = true
+                            searchViewModel.selectedResultForMap = null
+                            searchViewModel.executeSearch(
+                                context = context,
+                                radius = boundedRadius,
+                                coords = latitude to longitude,
+                                normalizedSettings = searchSettings,
+                            )
                             navigateTo(AppScreen.ParkingSearch)
                         },
                     )

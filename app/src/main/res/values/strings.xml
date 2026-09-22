@@ -174,10 +174,16 @@
     <string name="search_view_map">Map</string>
     <string name="search_origin_marker_title">Search origin</string>
     <string name="search_too_many_results_hint">Too many results found (%1$d). Refine radius or filters for better precision (threshold: %2$d).</string>
+    <string name="action_navigate">Navigate</string>
     <string name="action_navigate_direct">Direct</string>
     <string name="action_navigate_trip">Trip</string>
     <string name="action_copy_coords">Copy</string>
+    <string name="content_desc_close_card">Close details</string>
     <string name="feedback_coords_copied">Coordinates copied to clipboard</string>
+    <string name="search_loading_spots">Searching spots nearby…</string>
+    <string name="search_no_results_found">No parking spots found nearby. Try increasing the search radius in filters.</string>
+    <string name="search_filter_dialog_title">Filter &amp; Refine Search</string>
+    <string name="search_action_retry">Retry</string>
     <string name="feedback_nav_app_not_found">Navigation app not found, copied coordinates to clipboard</string>
     <string name="result_free_badge">FREE</string>
     <string name="result_paid_badge">PAID</string>

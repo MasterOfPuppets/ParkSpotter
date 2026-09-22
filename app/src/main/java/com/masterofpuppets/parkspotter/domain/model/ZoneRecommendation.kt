@@ -52,6 +52,7 @@ data class ZoneRecommendation(
     val rating: ZoneRating,
     val factors: List<ZoneFactor>,
     val recommendedMicroRadiusMeters: Int,
+    val distanceMeters: Int = 0,
 )
 
 data class ZoneSearchResult(

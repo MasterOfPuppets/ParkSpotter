@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.LocalParking
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -58,6 +60,7 @@ import androidx.core.location.LocationManagerCompat
 import androidx.core.os.CancellationSignal
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.masterofpuppets.parkspotter.R
+import com.masterofpuppets.parkspotter.ui.search.MapLocationPickerDialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -76,8 +79,8 @@ fun HomeMapScreen(
     modifier: Modifier = Modifier,
     snackbarHostState: SnackbarHostState,
     onOpenDrawer: () -> Unit = {},
-    onNavigateToParking: () -> Unit = {},
-    onNavigateToZone: () -> Unit = {},
+    onNavigateToParking: (latitude: Double, longitude: Double) -> Unit = { _, _ -> },
+    onNavigateToZone: (latitude: Double, longitude: Double) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -85,6 +88,7 @@ fun HomeMapScreen(
     var hasLocationPermission by remember { mutableStateOf(hasLocationPermission(context)) }
     var didCenterOnUser by remember { mutableStateOf(false) }
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
+    var showMapPicker by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
@@ -131,6 +135,7 @@ fun HomeMapScreen(
             homeViewModel.updateLocating(false)
             homeViewModel.markLocationFetchAttempted()
             if (location != null) {
+                Log.d("ParkSpotter", "HomeMapScreen: refreshCurrentLocation fetched lat=${location.latitude}, lon=${location.longitude}")
                 didCenterOnUser = false
                 val point = GeoPoint(location.latitude, location.longitude)
                 mapViewRef?.controller?.animateTo(point)
@@ -158,7 +163,9 @@ fun HomeMapScreen(
             homeViewModel.updateCurrentLocation(location)
             homeViewModel.updateLocating(false)
             homeViewModel.markLocationFetchAttempted()
-            if (location == null) {
+            if (location != null) {
+                Log.d("ParkSpotter", "HomeMapScreen: Initial GPS location set to lat=${location.latitude}, lon=${location.longitude}")
+            } else {
                 snackbarHostState.showSnackbar(unavailableMsg)
             }
         }
@@ -252,6 +259,21 @@ fun HomeMapScreen(
             }
 
             Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                shadowElevation = 4.dp,
+            ) {
+                IconButton(onClick = { showMapPicker = true }) {
+                    Icon(
+                        imageVector = Icons.Default.PinDrop,
+                        contentDescription = stringResource(R.string.search_btn_choose_map),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+
+            Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 6.dp,
@@ -292,7 +314,13 @@ fun HomeMapScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Button(
-                    onClick = onNavigateToParking,
+                    onClick = {
+                        val loc = homeViewModel.currentLocation ?: getBestLastKnownLocation(context)
+                        val lat = loc?.latitude ?: mapViewRef?.mapCenter?.latitude ?: 38.696728
+                        val lon = loc?.longitude ?: mapViewRef?.mapCenter?.longitude ?: -9.364814
+                        Log.d("ParkSpotter", "HomeMapScreen: 'Search spots here' tapped with lat=$lat, lon=$lon (currentLocation=${homeViewModel.currentLocation})")
+                        onNavigateToParking(lat, lon)
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp),
@@ -311,7 +339,13 @@ fun HomeMapScreen(
                 }
 
                 FilledTonalButton(
-                    onClick = onNavigateToZone,
+                    onClick = {
+                        val loc = homeViewModel.currentLocation ?: getBestLastKnownLocation(context)
+                        val lat = loc?.latitude ?: mapViewRef?.mapCenter?.latitude ?: 38.696728
+                        val lon = loc?.longitude ?: mapViewRef?.mapCenter?.longitude ?: -9.364814
+                        Log.d("ParkSpotter", "HomeMapScreen: 'Plan / explore zones' tapped with lat=$lat, lon=$lon (currentLocation=${homeViewModel.currentLocation})")
+                        onNavigateToZone(lat, lon)
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(46.dp),
@@ -326,6 +360,34 @@ fun HomeMapScreen(
                     )
                 }
             }
+        }
+
+        if (showMapPicker) {
+            val initialPoint = homeViewModel.currentLocation?.let { GeoPoint(it.latitude, it.longitude) }
+                ?: mapViewRef?.mapCenter?.let { GeoPoint(it.latitude, it.longitude) }
+                ?: GeoPoint(38.696728, -9.364814)
+
+            MapLocationPickerDialog(
+                initialLat = initialPoint.latitude,
+                initialLon = initialPoint.longitude,
+                onDismiss = { showMapPicker = false },
+                onConfirm = { lat, lon ->
+                    showMapPicker = false
+                    Log.d("ParkSpotter", "HomeMapScreen: Location picked via MapLocationPickerDialog -> lat=$lat, lon=$lon")
+                    val newLoc = Location(LocationManager.GPS_PROVIDER).apply {
+                        latitude = lat
+                        longitude = lon
+                        time = System.currentTimeMillis()
+                    }
+                    homeViewModel.updateCurrentLocation(newLoc)
+                    val newPoint = GeoPoint(lat, lon)
+                    mapViewRef?.controller?.animateTo(newPoint)
+                },
+                onGetCurrentLocation = {
+                    homeViewModel.currentLocation?.let { GeoPoint(it.latitude, it.longitude) }
+                        ?: getBestLastKnownLocation(context)?.let { GeoPoint(it.latitude, it.longitude) }
+                }
+            )
         }
 
         if (homeViewModel.isLocating) {

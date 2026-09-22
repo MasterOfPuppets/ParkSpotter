@@ -1,6 +1,7 @@
 package com.masterofpuppets.parkspotter.ui.search
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -91,6 +92,7 @@ class SearchViewModel(
             freeOnly = searchFormState.freeOnly,
             shouldShowTooManyResultsWarning = filtered.size > normalizedSettings.warnIfResultsAbove,
         )
+        selectedResultForMap = null
         searchPageIndex = 0
         isSearchConfigExpanded = false
         uiState = SearchUiState.Success
@@ -102,6 +104,7 @@ class SearchViewModel(
         coords: Pair<Double, Double>,
         normalizedSettings: SearchUiSettings
     ) {
+        Log.d("ParkSpotter", "SearchViewModel.executeSearch: Starting spot search at coords=(${coords.first}, ${coords.second}), radius=$radius")
         val requestParams = SearchRequestParams(
             originLat = coords.first,
             originLon = coords.second,
@@ -113,6 +116,7 @@ class SearchViewModel(
         )
 
         if (searchSession != null && requestParams == lastSubmittedParams) {
+            Log.d("ParkSpotter", "SearchViewModel.executeSearch: Reusing cached session with params=$requestParams")
             isSearchConfigExpanded = false
             uiState = SearchUiState.Success
             return
@@ -136,6 +140,10 @@ class SearchViewModel(
 
             uiState = result.fold(
                 onSuccess = { execResult ->
+                    Log.d("ParkSpotter", "SearchViewModel.executeSearch SUCCESS: ${execResult.filteredResults.size} filtered spots (origin: ${coords.first}, ${coords.second})")
+                    execResult.filteredResults.take(3).forEachIndexed { i, p ->
+                        Log.d("ParkSpotter", "  [Spot #$i] ${p.name} at (${p.latitude}, ${p.longitude}), dist=${p.distanceMeters}m")
+                    }
                     searchSession = SearchSessionState(
                         originLat = coords.first,
                         originLon = coords.second,
@@ -147,11 +155,13 @@ class SearchViewModel(
                         rawOverpassElements = execResult.rawElements,
                         routeGeometry = execResult.routeGeometry,
                     )
+                    selectedResultForMap = null
                     
                     isSearchConfigExpanded = false
                     SearchUiState.Success
                 },
                 onFailure = { error ->
+                    Log.e("ParkSpotter", "SearchViewModel.executeSearch FAILURE: ${error.message}", error)
                     val code = error.message?.substringAfter("HTTP_") ?: ""
                     val msg = error.localizedMessage ?: ""
                     val displayError = if (code.isNotBlank() && code.all { it.isDigit() }) {

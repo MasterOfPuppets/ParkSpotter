@@ -1,7 +1,7 @@
 package com.masterofpuppets.parkspotter.domain.service.zone
 
 data class ZoneClassificationConfig(
-    val analysisRadiusMeters: Int = 6_000,
+    val analysisRadiusMeters: Int = 2_500,
     val maxRecommendations: Int = 4,
     val maxRecommendationsPerCategory: Int = 2,
     val minimumDistanceBetweenResultsMeters: Int = 450,
